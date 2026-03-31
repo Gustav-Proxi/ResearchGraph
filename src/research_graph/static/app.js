@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════
    ResearchGraph — app.js
-   Query hero · Background runs · Live polling · D3 graph
+   Query hero · Background runs · Live polling · 3D graph
 ═══════════════════════════════════════════════════════ */
 
 const GRAPH_KINDS = ["papers","agents","experiments","reports","learning","technology","agentic","unified"];
@@ -218,6 +218,15 @@ async function saveProject() {
 }
 
 async function loadDemoAndRun() {
+  // Fill the query form with the demo project's details
+  const res = await fetch("/api/projects/demo-project");
+  if (res.ok) {
+    const p = await res.json();
+    $("project-name").value    = p.name    || "";
+    $("project-domain").value  = p.domain  || "";
+    $("project-problem").value = p.problem || "";
+    $("project-abstract").value = p.abstract || "";
+  }
   state.projectId = "demo-project";
   localStorage.setItem(STORAGE_KEY, "demo-project");
   await loadProjects("demo-project");
@@ -317,110 +326,109 @@ async function loadAndDrawGraph() {
   } catch (_) { /* non-fatal */ }
 }
 
+/* ── 3D Force Graph (Three.js via 3d-force-graph) ──────────────────────── */
+
+let _graph3d = null;          // ForceGraph3D instance
+let _graphNodeIds = new Set();// IDs already in the 3D graph
+
+function _nodeColor(node) {
+  return parseInt((NODE_COLORS[node.kind] || "#64748b").replace("#",""), 16);
+}
+
+function _nodeRadius(node) {
+  return 4 + Math.min((node._deg||0) * 1.5, 10);
+}
+
+function _initGraph3d() {
+  const el = $("graph-canvas");
+  if (!el) return;
+  el.innerHTML = "";
+  const W = el.clientWidth  || 900;
+  const H = el.clientHeight || 530;
+
+  _graph3d = ForceGraph3D({ antialias: true, alpha: true })(el)
+    .width(W).height(H)
+    .backgroundColor("rgba(0,0,0,0)")
+    .showNavInfo(false)
+    .nodeLabel(n => `<div style="background:#0f172a;border:1px solid #334155;padding:4px 8px;border-radius:6px;font-size:12px;color:#e2e8f0;max-width:220px">${esc(n.label)}</div>`)
+    .nodeColor(_nodeColor)
+    .nodeVal(n => (_nodeRadius(n)) ** 2)
+    .nodeOpacity(0.92)
+    .nodeResolution(16)
+    .linkColor(() => 0x334155)
+    .linkWidth(0.5)
+    .linkOpacity(0.5)
+    .linkDirectionalParticles(1)
+    .linkDirectionalParticleWidth(1.2)
+    .linkDirectionalParticleColor(l => {
+      const src = typeof l.source === "object" ? l.source : {};
+      return _nodeColor(src) || 0x22d3ee;
+    })
+    .onNodeClick(node => showNodeDetail(node))
+    .graphData({ nodes: [], links: [] });
+
+  // Make background transparent (canvas style)
+  const renderer = _graph3d.renderer();
+  if (renderer) { renderer.setClearAlpha(0); renderer.setPixelRatio(window.devicePixelRatio); }
+
+  _graphNodeIds = new Set();
+}
+
 function drawGraph(graph) {
   if (!graph?.nodes?.length) return;
 
-  if (state.graphSim) { state.graphSim.stop(); state.graphSim = null; }
+  const el = $("graph-canvas");
+  if (!el) return;
 
-  const svgEl = $("graph-canvas");
-  const W = svgEl.clientWidth  || 900;
-  const H = svgEl.clientHeight || 530;
+  // Init 3D graph if not yet created
+  if (!_graph3d) _initGraph3d();
 
-  const svg = d3.select(svgEl);
-  svg.selectAll("*").remove();
+  // Compute new nodes / links
+  const existingIds = _graphNodeIds;
+  const newNodes = graph.nodes.filter(n => !existingIds.has(n.id));
+  const newEdges = graph.edges || [];
 
-  /* defs — glow filters */
-  const defs = svg.append("defs");
-  const glow = defs.append("filter").attr("id","glow").attr("x","-40%").attr("y","-40%").attr("width","180%").attr("height","180%");
-  glow.append("feGaussianBlur").attr("in","SourceGraphic").attr("stdDeviation","4").attr("result","blur");
-  const m1 = glow.append("feMerge");
-  m1.append("feMergeNode").attr("in","blur");
-  m1.append("feMergeNode").attr("in","SourceGraphic");
+  if (newNodes.length === 0 && existingIds.size > 0) return; // nothing new
 
-  const glowBig = defs.append("filter").attr("id","glow-big").attr("x","-60%").attr("y","-60%").attr("width","220%").attr("height","220%");
-  glowBig.append("feGaussianBlur").attr("in","SourceGraphic").attr("stdDeviation","7").attr("result","blur");
-  const m2 = glowBig.append("feMerge");
-  m2.append("feMergeNode").attr("in","blur");
-  m2.append("feMergeNode").attr("in","SourceGraphic");
-
-  /* data */
-  const nodes = graph.nodes.map(d => ({...d}));
-  const byId  = {};
-  nodes.forEach(n => { byId[n.id] = n; });
-  const links = graph.edges
-    .filter(e => byId[e.source] && byId[e.target])
-    .map(e => ({...e, source: byId[e.source], target: byId[e.target]}));
-
-  /* degree */
+  // Degree map for sizing
   const deg = {};
-  links.forEach(l => {
-    const s = typeof l.source==="object"?l.source.id:l.source;
-    const t = typeof l.target==="object"?l.target.id:l.target;
-    deg[s]=(deg[s]||0)+1; deg[t]=(deg[t]||0)+1;
+  newEdges.forEach(e => {
+    deg[e.source] = (deg[e.source]||0) + 1;
+    deg[e.target] = (deg[e.target]||0) + 1;
   });
-  nodes.forEach(n => { n._deg = deg[n.id]||0; n._r = 7 + Math.min(n._deg*2.5, 18); });
+  newNodes.forEach(n => { n._deg = (deg[n.id]||0); });
 
-  /* legend */
-  const kinds = [...new Set(nodes.map(n=>n.kind))];
-  $("graph-legend").innerHTML = kinds.map(k => {
+  // Update legend
+  const kinds = [...new Set(graph.nodes.map(n=>n.kind))];
+  const legend = $("graph-legend");
+  if (legend) legend.innerHTML = kinds.map(k => {
     const c = NODE_COLORS[k]||"#64748b";
     return `<span class="legend-item"><span class="legend-color" style="background:${c};box-shadow:0 0 6px ${c};"></span>${KIND_LABELS[k]||prettify(k)}</span>`;
   }).join("");
 
-  /* zoom */
-  const g = svg.append("g");
-  svg.call(d3.zoom().scaleExtent([0.1,8]).on("zoom", e => g.attr("transform",e.transform)));
+  // Get existing data and append new nodes/links
+  const existing = _graph3d.graphData();
+  const existingNodeSet = new Set(existing.nodes.map(n=>n.id));
+  const existingLinkSet = new Set(existing.links.map(l => {
+    const s = typeof l.source === "object" ? l.source.id : l.source;
+    const t = typeof l.target === "object" ? l.target.id : l.target;
+    return `${s}||${t}`;
+  }));
 
-  /* edges */
-  const linkSel = g.append("g").selectAll("line").data(links).join("line")
-    .attr("class", d => `g-edge${(d.weight||0)>0.5?" weighted":""}`)
-    .attr("stroke-opacity", d => 0.15+(d.weight||0.5)*0.25);
+  const allNodeIds = new Set([...existing.nodes.map(n=>n.id), ...newNodes.map(n=>n.id)]);
+  const mergedNodes = [...existing.nodes, ...newNodes];
+  const mergedLinks = [
+    ...existing.links,
+    ...newEdges
+      .filter(e => {
+        const key = `${e.source}||${e.target}`;
+        return allNodeIds.has(e.source) && allNodeIds.has(e.target) && !existingLinkSet.has(key);
+      })
+      .map(e => ({ source: e.source, target: e.target, kind: e.kind, weight: e.weight }))
+  ];
 
-  /* nodes */
-  const nodeSel = g.append("g").selectAll("g").data(nodes).join("g")
-    .attr("class","g-node")
-    .attr("opacity",0)
-    .call(d3.drag()
-      .on("start",(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
-      .on("drag", (e,d)=>{d.fx=e.x;d.fy=e.y;})
-      .on("end",  (e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;})
-    )
-    .on("click",(e,d)=>{e.stopPropagation();showNodeDetail(d);})
-    .on("mouseenter",function(){d3.select(this).select("circle").attr("filter","url(#glow-big)");})
-    .on("mouseleave",function(){d3.select(this).select("circle").attr("filter","url(#glow)");});
-
-  const col = d => NODE_COLORS[d.kind]||"#64748b";
-
-  nodeSel.append("circle")
-    .attr("r",d=>d._r)
-    .attr("fill",d=>col(d)).attr("fill-opacity",0.18)
-    .attr("stroke",d=>col(d)).attr("stroke-opacity",0.85)
-    .attr("filter","url(#glow)");
-
-  nodeSel.append("text")
-    .attr("dy",d=>d._r+12)
-    .attr("text-anchor","middle")
-    .text(d=>trunc(d.label,18));
-
-  /* fade in */
-  nodeSel.transition().delay((_,i)=>i*22).duration(320).attr("opacity",1);
-
-  /* simulation */
-  const sim = d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(links).id(d=>d.id).distance(75).strength(0.4))
-    .force("charge", d3.forceManyBody().strength(-280).distanceMax(420))
-    .force("center", d3.forceCenter(W/2,H/2))
-    .force("collide", d3.forceCollide(d=>d._r+16))
-    .alphaDecay(0.025);
-
-  sim.on("tick",()=>{
-    linkSel.attr("x1",d=>d.source.x).attr("y1",d=>d.source.y)
-           .attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
-    nodeSel.attr("transform",d=>`translate(${d.x??W/2},${d.y??H/2})`);
-  });
-
-  state.graphSim = sim;
-  svg.on("click",()=>$("node-detail").classList.remove("open"));
+  _graph3d.graphData({ nodes: mergedNodes, links: mergedLinks });
+  newNodes.forEach(n => existingIds.add(n.id));
 }
 
 function showNodeDetail(d) {
@@ -441,23 +449,24 @@ function showNodeDetail(d) {
 /* ═══════════════════════════════════════════
    STAGE PROGRESS (live sidebar)
 ═══════════════════════════════════════════ */
-// Known pipeline stages (for showing pending ones before they start)
+// Known pipeline stages in topological order — must match actual agent IDs from seed.py
 const PIPELINE_STAGES = [
-  "intake","evidence_discovery","planning","survey",
-  "experiments","memory","coordination","novelty","writing"
+  "agent-intake", "agent-evidence", "agent-planning-graph", "agent-survey",
+  "agent-planner", "agent-critic", "agent-grounding", "agent-novelty",
+  "agent-coordinator", "agent-judge", "agent-executor", "agent-memory", "agent-writer"
 ];
 
 function renderStageProgress(stages=[], runStatus="queued") {
-  const stagesByRole = {};
-  stages.forEach(s => { stagesByRole[s.stage_id||s.stage_name.toLowerCase().replace(/ /g,"_")] = s; });
+  // Build lookup by stage_id
+  const byId = {};
+  stages.forEach(s => { if (s.stage_id) byId[s.stage_id] = s; });
 
-  const knownIds = new Set([
-    ...PIPELINE_STAGES,
-    ...stages.map(s => s.stage_id||s.stage_name.toLowerCase().replace(/ /g,"_")),
-  ]);
+  // All known IDs: pipeline order first, then any extra stages not in the list
+  const extraIds = stages.map(s => s.stage_id).filter(id => id && !PIPELINE_STAGES.includes(id));
+  const knownIds = [...PIPELINE_STAGES, ...extraIds];
 
-  const rows = [...knownIds].map(sid => {
-    const s = stages.find(x => (x.stage_id||x.stage_name.toLowerCase().replace(/ /g,"_"))===sid);
+  const rows = knownIds.map(sid => {
+    const s = byId[sid];
     if (!s) {
       return `<div class="sp-item pending">
         <span class="sp-dot"></span>
@@ -799,7 +808,7 @@ function esc(v) {
 }
 
 function prettify(v) {
-  return String(v).replaceAll("_"," ").replaceAll("-"," ").replace(/\b\w/g,l=>l.toUpperCase());
+  return String(v).replace(/^agent-/,"").replaceAll("_"," ").replaceAll("-"," ").replace(/\b\w/g,l=>l.toUpperCase());
 }
 
 function prettifySectionKey(k) {

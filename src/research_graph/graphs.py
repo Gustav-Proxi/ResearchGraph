@@ -885,6 +885,92 @@ def _dedupe_graph(graph: GraphData) -> GraphData:
     return GraphData(name=graph.name, kind=graph.kind, nodes=list(nodes_by_id.values()), edges=deduped_edges)
 
 
+def build_live_run_graph(run: RuntimeRun, kind: str = "unified") -> GraphData:
+    """Build a graph from run artifacts — works mid-run for live polling.
+    Only includes nodes for stages that have completed + their discovered artifacts."""
+    nodes: list = []
+    edges: list = []
+    seen: set = set()
+
+    def add_node(node_id, label, node_kind, metadata=None):
+        if node_id and node_id not in seen:
+            nodes.append(GraphNode(id=node_id, label=str(label)[:60], kind=node_kind, metadata=metadata or {}))
+            seen.add(node_id)
+
+    def add_edge(src, tgt, edge_kind, weight=0.5):
+        if src in seen and tgt in seen:
+            edges.append(GraphEdge(source=src, target=tgt, kind=edge_kind, weight=weight))
+
+    artifacts = run.artifacts or {}
+    stage_ids = [s.stage_id for s in run.stages]
+
+    # Agent nodes (one per completed stage, in pipeline order)
+    prev_id = None
+    for stage in run.stages:
+        add_node(stage.stage_id, stage.stage_name, "agent", {
+            "role": stage.role, "status": stage.status,
+            "model": stage.model_name or "", "mode": stage.model_mode or "",
+        })
+        if prev_id:
+            add_edge(prev_id, stage.stage_id, "pipeline", 0.6)
+        prev_id = stage.stage_id
+
+    # Papers from evidence discovery
+    for anchor in artifacts.get("paper_graph", {}).get("anchors", []):
+        pid = anchor.get("id", "")
+        add_node(pid, anchor.get("title", ""), "paper", {
+            "year": anchor.get("year"), "citations": anchor.get("citations"),
+            "score": anchor.get("score"),
+        })
+        if "agent-evidence" in seen:
+            add_edge("agent-evidence", pid, "discovered", min(1.0, (anchor.get("score") or 1) / 10.0))
+
+    # Research options / proposals
+    for opt in artifacts.get("proposal_options", []):
+        oid = opt.get("id", "")
+        add_node(oid, opt.get("title", ""), "artifact", {
+            "novelty": opt.get("novelty"), "feasibility": opt.get("feasibility"),
+            "summary": str(opt.get("summary", ""))[:120],
+        })
+        if "agent-planner" in seen:
+            add_edge("agent-planner", oid, "proposed", opt.get("novelty") or 0.5)
+
+    # Novelty hypotheses
+    for hyp in artifacts.get("novelty_hypotheses", []):
+        hid = hyp.get("id", "")
+        add_node(hid, hyp.get("title", ""), "novelty", {
+            "score": hyp.get("score"), "summary": str(hyp.get("summary", ""))[:120],
+        })
+        if "agent-novelty" in seen:
+            add_edge("agent-novelty", hid, "generated", min(1.0, (hyp.get("score") or 5) / 10.0))
+
+    # Judged decision
+    judged = artifacts.get("judged_decision", {})
+    if isinstance(judged, dict) and judged.get("status") == "approved":
+        add_node("decision", judged.get("decision_title", "Decision")[:60], "artifact", {
+            "vote_score": judged.get("vote_score"), "grounding": judged.get("grounding_score"),
+            "summary": str(judged.get("summary", ""))[:120],
+        })
+        if "agent-judge" in seen:
+            add_edge("agent-judge", "decision", "decided", judged.get("vote_score") or 0.8)
+        winner_id = judged.get("selected_option_id", "")
+        if winner_id in seen:
+            add_edge(winner_id, "decision", "selected", 0.9)
+
+    # Final report
+    fr = artifacts.get("final_report", {})
+    if isinstance(fr, dict) and fr.get("status") == "completed":
+        add_node("final-report", fr.get("decision_title", "Final Report")[:60], "report_section", {
+            "sections": fr.get("sections"), "llm_generated": fr.get("llm_generated", False),
+        })
+        if "agent-writer" in seen:
+            add_edge("agent-writer", "final-report", "wrote", 0.9)
+        if "decision" in seen:
+            add_edge("decision", "final-report", "grounded", 0.7)
+
+    return GraphData(name=f"Live Run ({run.status})", kind=kind, nodes=nodes, edges=edges)
+
+
 def _run_stage_node_id(run_id: str, stage_id: str) -> str:
     return f"{run_id}::stage::{stage_id}"
 

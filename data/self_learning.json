@@ -1,7 +1,7 @@
 {
   "projects": {
     "demo-project": {
-      "run_count": 26,
+      "run_count": 27,
       "lessons": {
         "lesson-resilient-fallback": {
           "id": "lesson-resilient-fallback",
@@ -63,9 +63,9 @@
             "agent-novelty": "Novelty Critic Agent",
             "agent-writer": "Writer Agent"
           },
-          "last_run_id": "run-82b02505eef6",
-          "occurrences": 26,
-          "strength": 10.1
+          "last_run_id": "run-60d9235c8241",
+          "occurrences": 27,
+          "strength": 10.45
         },
         "lesson-experiment-grounding": {
           "id": "lesson-experiment-grounding",
@@ -90,9 +90,9 @@
             "agent-novelty": "Novelty Critic Agent",
             "agent-writer": "Writer Agent"
           },
-          "last_run_id": "run-82b02505eef6",
-          "occurrences": 26,
-          "strength": 10.1
+          "last_run_id": "run-60d9235c8241",
+          "occurrences": 27,
+          "strength": 10.45
         },
         "lesson-topology-adaptation": {
           "id": "lesson-topology-adaptation",
@@ -117,9 +117,9 @@
             "agent-novelty": "Novelty Critic Agent",
             "agent-writer": "Writer Agent"
           },
-          "last_run_id": "run-82b02505eef6",
-          "occurrences": 26,
-          "strength": 10.1
+          "last_run_id": "run-60d9235c8241",
+          "occurrences": 27,
+          "strength": 10.45
         },
         "lesson-cross-run-reflection": {
           "id": "lesson-cross-run-reflection",
@@ -144,9 +144,9 @@
             "agent-novelty": "Novelty Critic Agent",
             "agent-writer": "Writer Agent"
           },
-          "last_run_id": "run-82b02505eef6",
-          "occurrences": 25,
-          "strength": 9.75
+          "last_run_id": "run-60d9235c8241",
+          "occurrences": 26,
+          "strength": 10.1
         },
         "lesson-live-provider-available": {
           "id": "lesson-live-provider-available",
@@ -155,6 +155,7 @@
           "content": "A reachable model endpoint should be reused for synthesis-heavy stages before falling back.",
           "instruction": "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled.",
           "stage_ids": [
+            "agent-codegen",
             "agent-coordinator",
             "agent-critic",
             "agent-evidence",
@@ -184,9 +185,9 @@
             "agent-memory": "Memory Steward Agent",
             "agent-writer": "Writer Agent"
           },
-          "last_run_id": "run-82b02505eef6",
-          "occurrences": 12,
-          "strength": 5.2
+          "last_run_id": "run-60d9235c8241",
+          "occurrences": 13,
+          "strength": 5.55
         }
       },
       "stage_guidance": {
@@ -203,7 +204,7 @@
             "lesson-cross-run-reflection",
             "lesson-live-provider-available"
           ],
-          "score": 22.95
+          "score": 23.85
         },
         "agent-evidence": {
           "stage_id": "agent-evidence",
@@ -218,7 +219,7 @@
             "lesson-evidence-first",
             "lesson-live-provider-available"
           ],
-          "score": 23.4
+          "score": 24.3
         },
         "agent-planning-graph": {
           "stage_id": "agent-planning-graph",
@@ -233,7 +234,7 @@
             "lesson-topology-adaptation",
             "lesson-live-provider-available"
           ],
-          "score": 23.4
+          "score": 24.3
         },
         "agent-survey": {
           "stage_id": "agent-survey",
@@ -248,7 +249,7 @@
             "lesson-evidence-first",
             "lesson-live-provider-available"
           ],
-          "score": 23.4
+          "score": 24.3
         },
         "agent-planner": {
           "stage_id": "agent-planner",
@@ -265,7 +266,7 @@
             "lesson-topology-adaptation",
             "lesson-live-provider-available"
           ],
-          "score": 35.1
+          "score": 36.45
         },
         "agent-executor": {
           "stage_id": "agent-executor",
@@ -280,7 +281,7 @@
             "lesson-experiment-grounding",
             "lesson-live-provider-available"
           ],
-          "score": 23.4
+          "score": 24.3
         },
         "agent-memory": {
           "stage_id": "agent-memory",
@@ -297,7 +298,7 @@
             "lesson-cross-run-reflection",
             "lesson-live-provider-available"
           ],
-          "score": 34.65
+          "score": 36.0
         },
         "agent-coordinator": {
           "stage_id": "agent-coordinator",
@@ -312,7 +313,7 @@
             "lesson-topology-adaptation",
             "lesson-live-provider-available"
           ],
-          "score": 23.4
+          "score": 24.3
         },
         "agent-novelty": {
           "stage_id": "agent-novelty",
@@ -325,7 +326,7 @@
             "lesson-resilient-fallback",
             "lesson-live-provider-available"
           ],
-          "score": 11.7
+          "score": 12.15
         },
         "agent-writer": {
           "stage_id": "agent-writer",
@@ -342,7 +343,7 @@
             "lesson-cross-run-reflection",
             "lesson-live-provider-available"
           ],
-          "score": 34.65
+          "score": 36.0
         },
         "agent-critic": {
           "stage_id": "agent-critic",
@@ -355,7 +356,7 @@
             "lesson-resilient-fallback",
             "lesson-live-provider-available"
           ],
-          "score": 8.55
+          "score": 9.0
         },
         "agent-grounding": {
           "stage_id": "agent-grounding",
@@ -368,7 +369,7 @@
             "lesson-resilient-fallback",
             "lesson-live-provider-available"
           ],
-          "score": 8.55
+          "score": 9.0
         },
         "agent-judge": {
           "stage_id": "agent-judge",
@@ -381,7 +382,18 @@
             "lesson-resilient-fallback",
             "lesson-live-provider-available"
           ],
-          "score": 8.55
+          "score": 9.0
+        },
+        "agent-codegen": {
+          "stage_id": "agent-codegen",
+          "stage_name": "Code Generation Agent",
+          "instructions": [
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-live-provider-available"
+          ],
+          "score": 0.45
         }
       },
       "model_profiles": {
@@ -412,29 +424,60 @@
         "openrouter::openai/gpt-5.2": {
           "provider": "openrouter",
           "model": "openai/gpt-5.2",
-          "total_calls": 48,
-          "live_calls": 46,
+          "total_calls": 57,
+          "live_calls": 55,
           "fallback_calls": 2,
           "last_error": "The read operation timed out"
         },
         "openrouter::anthropic/claude-sonnet-4.5": {
           "provider": "openrouter",
           "model": "anthropic/claude-sonnet-4.5",
-          "total_calls": 24,
-          "live_calls": 24,
+          "total_calls": 28,
+          "live_calls": 28,
           "fallback_calls": 0,
           "last_error": ""
         },
         "openrouter::openai/gpt-5.2-codex": {
           "provider": "openrouter",
           "model": "openai/gpt-5.2-codex",
-          "total_calls": 6,
-          "live_calls": 6,
+          "total_calls": 7,
+          "live_calls": 7,
           "fallback_calls": 0,
           "last_error": ""
         }
       },
       "adaptation_history": [
+        {
+          "run_id": "run-60d9235c8241",
+          "created_at": "2026-03-31T21:55:08+00:00",
+          "summary": "run_index=27 | lessons=5 | fallbacks=0 | live_stages=14 | top_policy=Evidence before planning",
+          "applied_lessons": [
+            "lesson-evidence-first",
+            "lesson-experiment-grounding",
+            "lesson-topology-adaptation",
+            "lesson-cross-run-reflection",
+            "lesson-live-provider-available"
+          ],
+          "fallback_stages": [],
+          "live_stages": [
+            "Intake Agent",
+            "Evidence Scout Agent",
+            "Planning Graph Agent",
+            "Survey Agent",
+            "Planner Agent",
+            "Critic Agent",
+            "Grounding Agent",
+            "Novelty Critic Agent",
+            "Coordination Router Agent",
+            "Judge Agent",
+            "Code Generation Agent",
+            "Experiment Operator Agent",
+            "Memory Steward Agent",
+            "Writer Agent"
+          ],
+          "artifact_count": 60,
+          "message_count": 15
+        },
         {
           "run_id": "run-82b02505eef6",
           "created_at": "2026-03-31T01:40:51+00:00",
@@ -835,36 +878,6 @@
           "run_id": "run-ba17785e57a7",
           "created_at": "2026-03-30T21:42:44+00:00",
           "summary": "run_index=13 | lessons=5 | fallbacks=13 | live_stages=0 | top_policy=Resilient model fallback",
-          "applied_lessons": [
-            "lesson-resilient-fallback",
-            "lesson-evidence-first",
-            "lesson-experiment-grounding",
-            "lesson-topology-adaptation",
-            "lesson-cross-run-reflection"
-          ],
-          "fallback_stages": [
-            "Intake Agent",
-            "Evidence Scout Agent",
-            "Planning Graph Agent",
-            "Survey Agent",
-            "Planner Agent",
-            "Critic Agent",
-            "Grounding Agent",
-            "Novelty Critic Agent",
-            "Coordination Router Agent",
-            "Judge Agent",
-            "Experiment Operator Agent",
-            "Memory Steward Agent",
-            "Writer Agent"
-          ],
-          "live_stages": [],
-          "artifact_count": 40,
-          "message_count": 13
-        },
-        {
-          "run_id": "run-fe8fe3783d50",
-          "created_at": "2026-03-30T21:42:44+00:00",
-          "summary": "run_index=12 | lessons=5 | fallbacks=13 | live_stages=0 | top_policy=Resilient model fallback",
           "applied_lessons": [
             "lesson-resilient-fallback",
             "lesson-evidence-first",
@@ -1967,6 +1980,361 @@
             "Experiment Operator Agent"
           ],
           "artifact_count": 33,
+          "message_count": 13
+        }
+      ]
+    },
+    "project-a13efa042b": {
+      "run_count": 1,
+      "lessons": {
+        "lesson-evidence-first": {
+          "id": "lesson-evidence-first",
+          "title": "Evidence before planning",
+          "category": "research-flow",
+          "content": "Preserve intake, evidence discovery, and survey before committing to implementation decisions.",
+          "instruction": "Anchor planning choices in evidence coverage before expanding the task graph.",
+          "stage_ids": [
+            "agent-evidence",
+            "agent-survey",
+            "agent-planner"
+          ],
+          "stage_names": {
+            "agent-intake": "Intake Agent",
+            "agent-evidence": "Evidence Scout Agent",
+            "agent-planning-graph": "Planning Graph Agent",
+            "agent-survey": "Survey Agent",
+            "agent-planner": "Planner Agent",
+            "agent-critic": "Critic Agent",
+            "agent-grounding": "Grounding Agent",
+            "agent-novelty": "Novelty Critic Agent",
+            "agent-coordinator": "Coordination Router Agent",
+            "agent-judge": "Judge Agent",
+            "agent-executor": "Experiment Operator Agent",
+            "agent-memory": "Memory Steward Agent",
+            "agent-writer": "Writer Agent"
+          },
+          "last_run_id": "run-33a5015e12b8",
+          "occurrences": 1,
+          "strength": 1.0
+        },
+        "lesson-experiment-grounding": {
+          "id": "lesson-experiment-grounding",
+          "title": "Experiments ground the report",
+          "category": "reporting",
+          "content": "Keep experiment outputs in the writer loop so the final report reflects actual evidence and ablations.",
+          "instruction": "Route experiment summaries and failure motifs into the report graph before drafting.",
+          "stage_ids": [
+            "agent-executor",
+            "agent-memory",
+            "agent-writer"
+          ],
+          "stage_names": {
+            "agent-intake": "Intake Agent",
+            "agent-evidence": "Evidence Scout Agent",
+            "agent-planning-graph": "Planning Graph Agent",
+            "agent-survey": "Survey Agent",
+            "agent-planner": "Planner Agent",
+            "agent-critic": "Critic Agent",
+            "agent-grounding": "Grounding Agent",
+            "agent-novelty": "Novelty Critic Agent",
+            "agent-coordinator": "Coordination Router Agent",
+            "agent-judge": "Judge Agent",
+            "agent-executor": "Experiment Operator Agent",
+            "agent-memory": "Memory Steward Agent",
+            "agent-writer": "Writer Agent"
+          },
+          "last_run_id": "run-33a5015e12b8",
+          "occurrences": 1,
+          "strength": 1.0
+        },
+        "lesson-topology-adaptation": {
+          "id": "lesson-topology-adaptation",
+          "title": "Sparse mesh swarm coordination",
+          "category": "swarm-topology",
+          "content": "Coordination works better when planner, memory, and coordinator remain the routing hubs instead of a flat broadcast pattern.",
+          "instruction": "Keep high-value swarm traffic sparse and route novelty or failures through hub agents.",
+          "stage_ids": [
+            "agent-planning-graph",
+            "agent-planner",
+            "agent-coordinator"
+          ],
+          "stage_names": {
+            "agent-intake": "Intake Agent",
+            "agent-evidence": "Evidence Scout Agent",
+            "agent-planning-graph": "Planning Graph Agent",
+            "agent-survey": "Survey Agent",
+            "agent-planner": "Planner Agent",
+            "agent-critic": "Critic Agent",
+            "agent-grounding": "Grounding Agent",
+            "agent-novelty": "Novelty Critic Agent",
+            "agent-coordinator": "Coordination Router Agent",
+            "agent-judge": "Judge Agent",
+            "agent-executor": "Experiment Operator Agent",
+            "agent-memory": "Memory Steward Agent",
+            "agent-writer": "Writer Agent"
+          },
+          "last_run_id": "run-33a5015e12b8",
+          "occurrences": 1,
+          "strength": 1.0
+        },
+        "lesson-live-provider-available": {
+          "id": "lesson-live-provider-available",
+          "title": "Reachable model path",
+          "category": "model-routing",
+          "content": "A reachable model endpoint should be reused for synthesis-heavy stages before falling back.",
+          "instruction": "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled.",
+          "stage_ids": [
+            "agent-intake",
+            "agent-evidence",
+            "agent-planning-graph",
+            "agent-survey",
+            "agent-planner",
+            "agent-critic",
+            "agent-grounding",
+            "agent-novelty",
+            "agent-coordinator",
+            "agent-judge",
+            "agent-executor",
+            "agent-memory",
+            "agent-writer"
+          ],
+          "stage_names": {
+            "agent-intake": "Intake Agent",
+            "agent-evidence": "Evidence Scout Agent",
+            "agent-planning-graph": "Planning Graph Agent",
+            "agent-survey": "Survey Agent",
+            "agent-planner": "Planner Agent",
+            "agent-critic": "Critic Agent",
+            "agent-grounding": "Grounding Agent",
+            "agent-novelty": "Novelty Critic Agent",
+            "agent-coordinator": "Coordination Router Agent",
+            "agent-judge": "Judge Agent",
+            "agent-executor": "Experiment Operator Agent",
+            "agent-memory": "Memory Steward Agent",
+            "agent-writer": "Writer Agent"
+          },
+          "last_run_id": "run-33a5015e12b8",
+          "occurrences": 1,
+          "strength": 1.0
+        }
+      },
+      "stage_guidance": {
+        "agent-evidence": {
+          "stage_id": "agent-evidence",
+          "stage_name": "Evidence Scout Agent",
+          "instructions": [
+            "Anchor planning choices in evidence coverage before expanding the task graph.",
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-evidence-first",
+            "lesson-live-provider-available"
+          ],
+          "score": 0.9
+        },
+        "agent-survey": {
+          "stage_id": "agent-survey",
+          "stage_name": "Survey Agent",
+          "instructions": [
+            "Anchor planning choices in evidence coverage before expanding the task graph.",
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-evidence-first",
+            "lesson-live-provider-available"
+          ],
+          "score": 0.9
+        },
+        "agent-planner": {
+          "stage_id": "agent-planner",
+          "stage_name": "Planner Agent",
+          "instructions": [
+            "Anchor planning choices in evidence coverage before expanding the task graph.",
+            "Keep high-value swarm traffic sparse and route novelty or failures through hub agents.",
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-evidence-first",
+            "lesson-topology-adaptation",
+            "lesson-live-provider-available"
+          ],
+          "score": 1.35
+        },
+        "agent-executor": {
+          "stage_id": "agent-executor",
+          "stage_name": "Experiment Operator Agent",
+          "instructions": [
+            "Route experiment summaries and failure motifs into the report graph before drafting.",
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-experiment-grounding",
+            "lesson-live-provider-available"
+          ],
+          "score": 0.9
+        },
+        "agent-memory": {
+          "stage_id": "agent-memory",
+          "stage_name": "Memory Steward Agent",
+          "instructions": [
+            "Route experiment summaries and failure motifs into the report graph before drafting.",
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-experiment-grounding",
+            "lesson-live-provider-available"
+          ],
+          "score": 0.9
+        },
+        "agent-writer": {
+          "stage_id": "agent-writer",
+          "stage_name": "Writer Agent",
+          "instructions": [
+            "Route experiment summaries and failure motifs into the report graph before drafting.",
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-experiment-grounding",
+            "lesson-live-provider-available"
+          ],
+          "score": 0.9
+        },
+        "agent-planning-graph": {
+          "stage_id": "agent-planning-graph",
+          "stage_name": "Planning Graph Agent",
+          "instructions": [
+            "Keep high-value swarm traffic sparse and route novelty or failures through hub agents.",
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-topology-adaptation",
+            "lesson-live-provider-available"
+          ],
+          "score": 0.9
+        },
+        "agent-coordinator": {
+          "stage_id": "agent-coordinator",
+          "stage_name": "Coordination Router Agent",
+          "instructions": [
+            "Keep high-value swarm traffic sparse and route novelty or failures through hub agents.",
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-topology-adaptation",
+            "lesson-live-provider-available"
+          ],
+          "score": 0.9
+        },
+        "agent-intake": {
+          "stage_id": "agent-intake",
+          "stage_name": "Intake Agent",
+          "instructions": [
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-live-provider-available"
+          ],
+          "score": 0.45
+        },
+        "agent-critic": {
+          "stage_id": "agent-critic",
+          "stage_name": "Critic Agent",
+          "instructions": [
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-live-provider-available"
+          ],
+          "score": 0.45
+        },
+        "agent-grounding": {
+          "stage_id": "agent-grounding",
+          "stage_name": "Grounding Agent",
+          "instructions": [
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-live-provider-available"
+          ],
+          "score": 0.45
+        },
+        "agent-novelty": {
+          "stage_id": "agent-novelty",
+          "stage_name": "Novelty Critic Agent",
+          "instructions": [
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-live-provider-available"
+          ],
+          "score": 0.45
+        },
+        "agent-judge": {
+          "stage_id": "agent-judge",
+          "stage_name": "Judge Agent",
+          "instructions": [
+            "Bias synthesis and writing stages toward the reachable provider path while keeping fallback enabled."
+          ],
+          "lesson_ids": [
+            "lesson-live-provider-available"
+          ],
+          "score": 0.45
+        }
+      },
+      "model_profiles": {
+        "openrouter::openai/gpt-5.2": {
+          "provider": "openrouter",
+          "model": "openai/gpt-5.2",
+          "total_calls": 8,
+          "live_calls": 8,
+          "fallback_calls": 0,
+          "last_error": ""
+        },
+        "openrouter::anthropic/claude-sonnet-4.5": {
+          "provider": "openrouter",
+          "model": "anthropic/claude-sonnet-4.5",
+          "total_calls": 4,
+          "live_calls": 4,
+          "fallback_calls": 0,
+          "last_error": ""
+        },
+        "openrouter::openai/gpt-5.2-codex": {
+          "provider": "openrouter",
+          "model": "openai/gpt-5.2-codex",
+          "total_calls": 1,
+          "live_calls": 1,
+          "fallback_calls": 0,
+          "last_error": ""
+        }
+      },
+      "adaptation_history": [
+        {
+          "run_id": "run-33a5015e12b8",
+          "created_at": "2026-03-31T21:23:59+00:00",
+          "summary": "run_index=1 | lessons=4 | fallbacks=0 | live_stages=13 | top_policy=Evidence before planning",
+          "applied_lessons": [
+            "lesson-evidence-first",
+            "lesson-experiment-grounding",
+            "lesson-topology-adaptation",
+            "lesson-live-provider-available"
+          ],
+          "fallback_stages": [],
+          "live_stages": [
+            "Intake Agent",
+            "Evidence Scout Agent",
+            "Planning Graph Agent",
+            "Survey Agent",
+            "Planner Agent",
+            "Critic Agent",
+            "Grounding Agent",
+            "Novelty Critic Agent",
+            "Coordination Router Agent",
+            "Judge Agent",
+            "Experiment Operator Agent",
+            "Memory Steward Agent",
+            "Writer Agent"
+          ],
+          "artifact_count": 39,
           "message_count": 13
         }
       ]

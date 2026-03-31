@@ -15,6 +15,7 @@ class Paper:
     citations: int
     keywords: List[str]
     references: List[str] = field(default_factory=list)
+    url: str = ""
 
     def to_dict(self) -> Dict[str, object]:
         return asdict(self)
