@@ -5,16 +5,51 @@
 ═══════════════════════════════════════════════════════ */
 
 const GRAPH_KINDS = ["unified","papers","agents","experiments","reports","learning","technology","agentic"];
+
+// Color per graph kind (for tab indicators)
+const GRAPH_KIND_COLORS = {
+  unified:     "#6366f1",
+  papers:      "#f0a050",
+  agents:      "#4db8ff",
+  experiments: "#8b7cf8",
+  reports:     "#e8709a",
+  learning:    "#f08060",
+  technology:  "#34c9a0",
+  agentic:     "#b794f4",
+};
 const STORAGE_KEY = "rg-project-id";
 
 const NODE_COLORS = {
-  paper:"#fbbf24", agent:"#60a5fa", run_stage:"#60a5fa", applied_lesson:"#60a5fa",
-  experiment:"#818cf8", experiment_result:"#818cf8", run_summary:"#818cf8",
-  report_section:"#f472b6", final_report:"#f472b6", draft_section:"#f472b6",
-  technology:"#34d399", model:"#34d399", model_profile:"#34d399",
-  taxonomy_facet:"#fb923c", learning_lesson:"#fb923c", learning_reflection:"#fb923c",
-  novelty:"#a78bfa", memory_entry:"#a78bfa", artifact:"#64748b",
-  run_artifact:"#64748b", project:"#64748b", runtime_run:"#64748b",
+  // Papers — warm amber
+  paper:               "#f0a050",
+  // Pipeline agents — sky
+  agent:               "#4db8ff",
+  run_stage:           "#4db8ff",
+  applied_lesson:      "#4db8ff",
+  // Experiments — soft indigo
+  experiment:          "#8b7cf8",
+  experiment_result:   "#8b7cf8",
+  run_summary:         "#8b7cf8",
+  // Reports — rose
+  report_section:      "#e8709a",
+  final_report:        "#e8709a",
+  draft_section:       "#e8709a",
+  // Technology — teal
+  technology:          "#34c9a0",
+  model:               "#34c9a0",
+  model_profile:       "#34c9a0",
+  // Learning — coral
+  taxonomy_facet:      "#f08060",
+  learning_lesson:     "#f08060",
+  learning_reflection: "#f08060",
+  // Novelty — lavender
+  novelty:             "#b794f4",
+  memory_entry:        "#b794f4",
+  // Artifacts — steel
+  artifact:            "#6b8599",
+  run_artifact:        "#6b8599",
+  project:             "#6b8599",
+  runtime_run:         "#6b8599",
 };
 
 const KIND_LABELS = {
@@ -397,12 +432,24 @@ async function expandCitations() {
 ═══════════════════════════════════════════ */
 function renderGraphTabs() {
   const tabs = $("graph-tabs");
-  tabs.innerHTML = GRAPH_KINDS.map(k =>
-    `<button class="graph-tab${state.activeGraphKind===k?" active":""}" data-kind="${k}">${prettify(k)}</button>`
-  ).join("");
+  tabs.innerHTML = GRAPH_KINDS.map(k => {
+    const c = GRAPH_KIND_COLORS[k] || "#6366f1";
+    const active = state.activeGraphKind === k ? " active" : "";
+    const dotStyle = active
+      ? `background:${c};box-shadow:0 0 6px ${c}88`
+      : `background:${c}`;
+    return `<button class="graph-tab${active}" data-kind="${k}"><span class="graph-tab-dot" style="${dotStyle}"></span>${prettify(k)}</button>`;
+  }).join("");
   tabs.querySelectorAll(".graph-tab").forEach(btn => {
+    const k = btn.dataset.kind;
+    const c = GRAPH_KIND_COLORS[k] || "#6366f1";
+    if (state.activeGraphKind === k) {
+      btn.style.color = c;
+      btn.style.borderColor = c + "30";
+      btn.style.background = c + "14";
+    }
     btn.addEventListener("click", async () => {
-      state.activeGraphKind = btn.dataset.kind;
+      state.activeGraphKind = k;
       renderGraphTabs();
       _resetGraph();
       await loadAndDrawGraph();
