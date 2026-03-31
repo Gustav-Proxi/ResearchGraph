@@ -8,28 +8,36 @@ const STORAGE_KEY = "researchgraph-project-id";
 const POLL_MS     = 1800;  // poll interval while run is active
 
 const NODE_COLORS = {
-  paper:               "#fbbf24",
-  agent:               "#38bdf8",
-  run_stage:           "#38bdf8",
-  applied_lesson:      "#38bdf8",
-  experiment:          "#818cf8",
-  experiment_result:   "#818cf8",
-  run_summary:         "#818cf8",
-  report_section:      "#e879a0",
-  final_report:        "#e879a0",
-  draft_section:       "#e879a0",
-  technology:          "#34d399",
-  model:               "#34d399",
-  model_profile:       "#34d399",
-  taxonomy_facet:      "#fb923c",
-  learning_lesson:     "#fb923c",
-  learning_reflection: "#fb923c",
-  novelty:             "#a78bfa",
-  memory_entry:        "#a78bfa",
-  artifact:            "#64748b",
-  run_artifact:        "#64748b",
-  project:             "#64748b",
-  runtime_run:         "#64748b",
+  // Papers — warm amber
+  paper:               "#f0a050",
+  // Pipeline agents — sky blue
+  agent:               "#4db8ff",
+  run_stage:           "#4db8ff",
+  applied_lesson:      "#4db8ff",
+  // Experiments — soft indigo
+  experiment:          "#8b7cf8",
+  experiment_result:   "#8b7cf8",
+  run_summary:         "#8b7cf8",
+  // Reports/output — rose
+  report_section:      "#e8709a",
+  final_report:        "#e8709a",
+  draft_section:       "#e8709a",
+  // Technology/methods — emerald teal
+  technology:          "#34c9a0",
+  model:               "#34c9a0",
+  model_profile:       "#34c9a0",
+  // Learning — coral
+  taxonomy_facet:      "#f08060",
+  learning_lesson:     "#f08060",
+  learning_reflection: "#f08060",
+  // Novelty/ideas — lavender
+  novelty:             "#b794f4",
+  memory_entry:        "#b794f4",
+  // Artifacts — steel
+  artifact:            "#6b8599",
+  run_artifact:        "#6b8599",
+  project:             "#6b8599",
+  runtime_run:         "#6b8599",
 };
 
 const KIND_LABELS = {
@@ -327,199 +335,198 @@ async function loadAndDrawGraph() {
   } catch (_) { /* non-fatal */ }
 }
 
-/* ── 3D Force Graph (Three.js via 3d-force-graph) ──────────────────────── */
+/* ── Force Graph (2D canvas — clean, flat, minimal) ─────────────────────── */
 
-let _graph3d = null;
+let _graph    = null;
 let _graphNodeIds = new Set();
 let _graphAutoFit = false;
-let _THREE = null;  // cached THREE reference once available
+let _hoveredNode  = null;
 
 function _resetGraph() {
-  if (_graph3d) {
-    try { _graph3d._destructor && _graph3d._destructor(); } catch(_) {}
-  }
-  _graph3d = null;
+  if (_graph) { try { _graph._destructor && _graph._destructor(); } catch(_) {} }
+  _graph = null;
   _graphNodeIds = new Set();
   _graphAutoFit = false;
+  _hoveredNode  = null;
   const el = $("graph-canvas");
   if (el) el.innerHTML = "";
 }
 
-function _hexColor(node) {
-  return parseInt((NODE_COLORS[node.kind] || "#64748b").replace("#",""), 16);
-}
-
+/* Node radius in graph-space units */
 function _nodeSize(node) {
-  // Degree-scaled size: base 3, up to 10 for hubs
-  return 3 + Math.min((node._deg || 0) * 1.2, 7);
+  return 4.5 + Math.min((node._deg || 0) * 0.7, 5.5);
 }
 
-// Build a sprite-based node using a canvas texture — crisp circle with glow ring
-function _makeNodeSprite(node) {
-  // 3d-force-graph exposes THREE via the renderer's parent THREE object
-  if (!_THREE) {
-    try { _THREE = _graph3d.renderer().info && window.THREE; } catch(_) {}
-  }
-  if (!_THREE) return null;  // fallback to default solid sphere
-  const THREE = _THREE;
+/* Draw a single node onto the canvas context */
+function _drawNode(node, ctx, gs) {
+  const x = node.x, y = node.y;
+  const c    = NODE_COLORS[node.kind] || "#6b8599";
+  const r    = _nodeSize(node);
+  const hot  = node === _hoveredNode;
 
-  const hexStr = NODE_COLORS[node.kind] || "#64748b";
-  const sz = _nodeSize(node);
-  const px = Math.round(sz * 10);  // canvas resolution
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = px * 2;
-  const ctx = canvas.getContext("2d");
-
-  // Outer glow
-  const grd = ctx.createRadialGradient(px, px, px * 0.3, px, px, px);
-  grd.addColorStop(0, hexStr + "cc");
-  grd.addColorStop(0.5, hexStr + "44");
-  grd.addColorStop(1,   hexStr + "00");
-  ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, px * 2, px * 2);
-
-  // Solid core
+  // ── outer halo ──────────────────────────────────────────────────────────
+  const haloR = r * (hot ? 3.8 : 2.8);
+  const halo  = ctx.createRadialGradient(x, y, r * 0.4, x, y, haloR);
+  halo.addColorStop(0, c + (hot ? "30" : "18"));
+  halo.addColorStop(1, c + "00");
+  ctx.fillStyle = halo;
   ctx.beginPath();
-  ctx.arc(px, px, px * 0.38, 0, Math.PI * 2);
-  ctx.fillStyle = hexStr + "ff";
+  ctx.arc(x, y, haloR, 0, Math.PI * 2);
   ctx.fill();
 
-  // Thin ring
+  // ── filled disc (translucent) ────────────────────────────────────────────
   ctx.beginPath();
-  ctx.arc(px, px, px * 0.5, 0, Math.PI * 2);
-  ctx.strokeStyle = hexStr + "88";
-  ctx.lineWidth = px * 0.06;
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = c + (hot ? "28" : "16");
+  ctx.fill();
+
+  // ── ring ─────────────────────────────────────────────────────────────────
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.strokeStyle = c + (hot ? "ff" : "bb");
+  ctx.lineWidth   = Math.max(0.6, (hot ? 2.0 : 1.4) / gs);
   ctx.stroke();
 
-  const texture = new THREE.CanvasTexture(canvas);
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
-  const sprite = new THREE.Sprite(material);
-  const scale = sz * 2.2;
-  sprite.scale.set(scale, scale, 1);
-  return sprite;
+  // ── centre dot ──────────────────────────────────────────────────────────
+  ctx.beginPath();
+  ctx.arc(x, y, Math.max(0.8, r * 0.22), 0, Math.PI * 2);
+  ctx.fillStyle = c + (hot ? "ff" : "dd");
+  ctx.fill();
+
+  // ── label ────────────────────────────────────────────────────────────────
+  const lbl = (node.label || "").slice(0, 22) + (node.label?.length > 22 ? "…" : "");
+  // Show label always but fade at very low zoom
+  const alpha = Math.min(0.85, Math.max(0.25, gs * 0.55));
+  const fontSize = Math.max(2.5, Math.min(11, 10 / gs));
+  ctx.font         = `500 ${fontSize}px Inter, system-ui, sans-serif`;
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "top";
+  ctx.shadowColor  = "rgba(0,0,0,0.9)";
+  ctx.shadowBlur   = Math.max(1.5, 4 / gs);
+  ctx.fillStyle    = `rgba(203,213,225,${alpha})`;
+  ctx.fillText(lbl, x, y + r + 1.8 / gs);
+  ctx.shadowBlur   = 0;
 }
 
-function _initGraph3d() {
+/* Hit-area paint (invisible — used for click/hover detection) */
+function _paintHitArea(node, color, ctx) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(node.x, node.y, _nodeSize(node) + 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function _initGraph() {
   const el = $("graph-canvas");
   if (!el) return;
   el.innerHTML = "";
   _graphAutoFit = false;
+  _hoveredNode  = null;
   const W = el.clientWidth  || 900;
   const H = el.clientHeight || 530;
 
-  _graph3d = ForceGraph3D({ antialias: true, alpha: true })(el)
+  _graph = ForceGraph()(el)
     .width(W).height(H)
     .backgroundColor("#00000000")
-    .showNavInfo(false)
-    // Node rendering: custom sprite if THREE available, else colored sphere
-    .nodeThreeObject(node => {
-      const sprite = _makeNodeSprite(node);
-      return sprite || null;
-    })
-    .nodeThreeObjectExtend(false)
-    .nodeColor(node => NODE_COLORS[node.kind] || "#64748b")
-    .nodeVal(n => _nodeSize(n) ** 2)
-    .nodeOpacity(0.95)
-    .nodeResolution(12)
-    // Tooltip
+    // ── nodes ───────────────────────────────────────────────────────────────
+    .nodeCanvasObject(_drawNode)
+    .nodeCanvasObjectMode(() => "replace")
+    .nodePointerAreaPaint(_paintHitArea)
+    // ── tooltip ─────────────────────────────────────────────────────────────
     .nodeLabel(n => {
-      const c = NODE_COLORS[n.kind] || "#64748b";
+      const c   = NODE_COLORS[n.kind] || "#6b8599";
       const lbl = KIND_LABELS[n.kind] || prettify(n.kind);
-      return `<div style="background:rgba(8,14,24,0.92);border:1px solid ${c}44;padding:6px 10px;border-radius:8px;font-size:12px;color:#e2e8f0;max-width:240px;line-height:1.4;box-shadow:0 4px 16px #00000080">
-        <span style="color:${c};font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase">${lbl}</span><br/>
-        ${esc(n.label)}
-      </div>`;
+      return `<div style="background:rgba(6,10,20,0.93);border:1px solid ${c}44;padding:6px 10px;border-radius:8px;font-size:12px;color:#e2e8f0;max-width:260px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,0.7)"><span style="color:${c};font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;display:block;margin-bottom:2px">${lbl}</span>${esc(n.label)}</div>`;
     })
-    // Links: thin, near-transparent, particles for directionality
-    .linkColor(() => "#1e293b")
-    .linkWidth(0.4)
-    .linkOpacity(0.35)
+    // ── links ───────────────────────────────────────────────────────────────
+    .linkColor(l => {
+      const src = typeof l.source === "object" ? l.source : {};
+      return (NODE_COLORS[src.kind] || "#334155") + "40";
+    })
+    .linkWidth(l => (l.weight || 1) * 0.6)
+    .linkCurvature(0.18)
+    .linkDirectionalArrowLength(4)
+    .linkDirectionalArrowRelPos(0.82)
+    .linkDirectionalArrowColor(l => {
+      const src = typeof l.source === "object" ? l.source : {};
+      return (NODE_COLORS[src.kind] || "#4db8ff") + "88";
+    })
     .linkDirectionalParticles(2)
-    .linkDirectionalParticleWidth(0.8)
-    .linkDirectionalParticleSpeed(0.004)
+    .linkDirectionalParticleWidth(1.8)
+    .linkDirectionalParticleSpeed(0.0045)
     .linkDirectionalParticleColor(l => {
       const src = typeof l.source === "object" ? l.source : {};
-      return NODE_COLORS[src.kind] || "#38bdf8";
+      return NODE_COLORS[src.kind] || "#4db8ff";
     })
-    // Interaction
+    // ── interaction ─────────────────────────────────────────────────────────
     .onNodeClick(node => showNodeDetail(node))
-    .onNodeHover(node => { el.style.cursor = node ? "pointer" : "grab"; })
+    .onNodeHover(node => {
+      _hoveredNode = node;
+      el.style.cursor = node ? "pointer" : "grab";
+      if (_graph) _graph.nodeCanvasObject(_drawNode); // force repaint
+    })
     .graphData({ nodes: [], links: [] });
 
-  // Transparent background + pixel ratio
-  const renderer = _graph3d.renderer();
-  if (renderer) {
-    renderer.setClearAlpha(0);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  }
-
-  // Looser physics — more space between nodes
-  _graph3d.d3Force("charge").strength(-120);
-  _graph3d.d3Force("link").distance(60);
+  // Physics: good separation, not too tight
+  _graph.d3Force("charge").strength(-220);
+  _graph.d3Force("link").distance(70);
 
   _graphNodeIds = new Set();
 }
 
 function drawGraph(graph) {
   if (!graph?.nodes?.length) return;
-
   const el = $("graph-canvas");
   if (!el) return;
 
-  // Init 3D graph if not yet created
-  if (!_graph3d) _initGraph3d();
+  if (!_graph) _initGraph();
 
-  // Compute new nodes / links
-  const existingIds = _graphNodeIds;
-  const newNodes = graph.nodes.filter(n => !existingIds.has(n.id));
-  const newEdges = graph.edges || [];
+  const existingIds  = _graphNodeIds;
+  const newNodes     = graph.nodes.filter(n => !existingIds.has(n.id));
+  const newEdges     = graph.edges || [];
 
-  if (newNodes.length === 0 && existingIds.size > 0) return; // nothing new
+  if (newNodes.length === 0 && existingIds.size > 0) return;
 
-  // Degree map for sizing
+  // Degree map for node sizing
   const deg = {};
-  newEdges.forEach(e => {
-    deg[e.source] = (deg[e.source]||0) + 1;
-    deg[e.target] = (deg[e.target]||0) + 1;
+  (graph.edges || []).forEach(e => {
+    deg[e.source] = (deg[e.source] || 0) + 1;
+    deg[e.target] = (deg[e.target] || 0) + 1;
   });
-  newNodes.forEach(n => { n._deg = (deg[n.id]||0); });
+  graph.nodes.forEach(n => { n._deg = deg[n.id] || 0; });
 
-  // Update legend
-  const kinds = [...new Set(graph.nodes.map(n=>n.kind))];
+  // Legend
+  const kinds  = [...new Set(graph.nodes.map(n => n.kind))];
   const legend = $("graph-legend");
   if (legend) legend.innerHTML = kinds.map(k => {
-    const c = NODE_COLORS[k]||"#64748b";
-    return `<span class="legend-item"><span class="legend-color" style="background:${c};box-shadow:0 0 6px ${c};"></span>${KIND_LABELS[k]||prettify(k)}</span>`;
+    const c = NODE_COLORS[k] || "#6b8599";
+    return `<span class="legend-item"><span class="legend-dot" style="background:${c}"></span>${KIND_LABELS[k] || prettify(k)}</span>`;
   }).join("");
 
-  // Get existing data and append new nodes/links
-  const existing = _graph3d.graphData();
-  const existingNodeSet = new Set(existing.nodes.map(n=>n.id));
-  const existingLinkSet = new Set(existing.links.map(l => {
+  // Merge into existing graph data
+  const existing      = _graph.graphData();
+  const allNodeIds    = new Set([...existing.nodes.map(n => n.id), ...newNodes.map(n => n.id)]);
+  const existingLinks = new Set(existing.links.map(l => {
     const s = typeof l.source === "object" ? l.source.id : l.source;
     const t = typeof l.target === "object" ? l.target.id : l.target;
     return `${s}||${t}`;
   }));
 
-  const allNodeIds = new Set([...existing.nodes.map(n=>n.id), ...newNodes.map(n=>n.id)]);
   const mergedNodes = [...existing.nodes, ...newNodes];
   const mergedLinks = [
     ...existing.links,
     ...newEdges
-      .filter(e => {
-        const key = `${e.source}||${e.target}`;
-        return allNodeIds.has(e.source) && allNodeIds.has(e.target) && !existingLinkSet.has(key);
-      })
-      .map(e => ({ source: e.source, target: e.target, kind: e.kind, weight: e.weight }))
+      .filter(e => allNodeIds.has(e.source) && allNodeIds.has(e.target) && !existingLinks.has(`${e.source}||${e.target}`))
+      .map(e => ({ source: e.source, target: e.target, kind: e.kind, weight: e.weight || 1 })),
   ];
 
-  _graph3d.graphData({ nodes: mergedNodes, links: mergedLinks });
+  _graph.graphData({ nodes: mergedNodes, links: mergedLinks });
   newNodes.forEach(n => existingIds.add(n.id));
 
-  // Auto-fit camera after first non-trivial batch so graph fills the viewport
+  // Auto-fit after first batch
   if (!_graphAutoFit && mergedNodes.length >= 3) {
     _graphAutoFit = true;
-    setTimeout(() => _graph3d.zoomToFit(800, 80), 1200);
+    setTimeout(() => _graph.zoomToFit(700, 60), 1000);
   }
 }
 
