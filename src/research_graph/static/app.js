@@ -8,16 +8,16 @@ const STORAGE_KEY = "researchgraph-project-id";
 const POLL_MS     = 1800;  // poll interval while run is active
 
 const NODE_COLORS = {
-  paper:               "#f59e0b",
-  agent:               "#22d3ee",
-  run_stage:           "#22d3ee",
-  applied_lesson:      "#22d3ee",
+  paper:               "#fbbf24",
+  agent:               "#38bdf8",
+  run_stage:           "#38bdf8",
+  applied_lesson:      "#38bdf8",
   experiment:          "#818cf8",
   experiment_result:   "#818cf8",
   run_summary:         "#818cf8",
-  report_section:      "#f472b6",
-  final_report:        "#f472b6",
-  draft_section:       "#f472b6",
+  report_section:      "#e879a0",
+  final_report:        "#e879a0",
+  draft_section:       "#e879a0",
   technology:          "#34d399",
   model:               "#34d399",
   model_profile:       "#34d399",
@@ -26,10 +26,10 @@ const NODE_COLORS = {
   learning_reflection: "#fb923c",
   novelty:             "#a78bfa",
   memory_entry:        "#a78bfa",
-  artifact:            "#94a3b8",
-  run_artifact:        "#94a3b8",
-  project:             "#94a3b8",
-  runtime_run:         "#94a3b8",
+  artifact:            "#64748b",
+  run_artifact:        "#64748b",
+  project:             "#64748b",
+  runtime_run:         "#64748b",
 };
 
 const KIND_LABELS = {
@@ -310,6 +310,7 @@ function renderGraphTabs() {
     btn.addEventListener("click", async () => {
       state.activeGraphKind = btn.dataset.kind;
       renderGraphTabs();
+      _resetGraph();  // clear 3D graph when switching kinds
       await loadAndDrawGraph();
     });
   });
@@ -328,48 +329,133 @@ async function loadAndDrawGraph() {
 
 /* ── 3D Force Graph (Three.js via 3d-force-graph) ──────────────────────── */
 
-let _graph3d = null;          // ForceGraph3D instance
-let _graphNodeIds = new Set();// IDs already in the 3D graph
+let _graph3d = null;
+let _graphNodeIds = new Set();
+let _graphAutoFit = false;
+let _THREE = null;  // cached THREE reference once available
 
-function _nodeColor(node) {
+function _resetGraph() {
+  if (_graph3d) {
+    try { _graph3d._destructor && _graph3d._destructor(); } catch(_) {}
+  }
+  _graph3d = null;
+  _graphNodeIds = new Set();
+  _graphAutoFit = false;
+  const el = $("graph-canvas");
+  if (el) el.innerHTML = "";
+}
+
+function _hexColor(node) {
   return parseInt((NODE_COLORS[node.kind] || "#64748b").replace("#",""), 16);
 }
 
-function _nodeRadius(node) {
-  return 4 + Math.min((node._deg||0) * 1.5, 10);
+function _nodeSize(node) {
+  // Degree-scaled size: base 3, up to 10 for hubs
+  return 3 + Math.min((node._deg || 0) * 1.2, 7);
+}
+
+// Build a sprite-based node using a canvas texture — crisp circle with glow ring
+function _makeNodeSprite(node) {
+  // 3d-force-graph exposes THREE via the renderer's parent THREE object
+  if (!_THREE) {
+    try { _THREE = _graph3d.renderer().info && window.THREE; } catch(_) {}
+  }
+  if (!_THREE) return null;  // fallback to default solid sphere
+  const THREE = _THREE;
+
+  const hexStr = NODE_COLORS[node.kind] || "#64748b";
+  const sz = _nodeSize(node);
+  const px = Math.round(sz * 10);  // canvas resolution
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = px * 2;
+  const ctx = canvas.getContext("2d");
+
+  // Outer glow
+  const grd = ctx.createRadialGradient(px, px, px * 0.3, px, px, px);
+  grd.addColorStop(0, hexStr + "cc");
+  grd.addColorStop(0.5, hexStr + "44");
+  grd.addColorStop(1,   hexStr + "00");
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, px * 2, px * 2);
+
+  // Solid core
+  ctx.beginPath();
+  ctx.arc(px, px, px * 0.38, 0, Math.PI * 2);
+  ctx.fillStyle = hexStr + "ff";
+  ctx.fill();
+
+  // Thin ring
+  ctx.beginPath();
+  ctx.arc(px, px, px * 0.5, 0, Math.PI * 2);
+  ctx.strokeStyle = hexStr + "88";
+  ctx.lineWidth = px * 0.06;
+  ctx.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(material);
+  const scale = sz * 2.2;
+  sprite.scale.set(scale, scale, 1);
+  return sprite;
 }
 
 function _initGraph3d() {
   const el = $("graph-canvas");
   if (!el) return;
   el.innerHTML = "";
+  _graphAutoFit = false;
   const W = el.clientWidth  || 900;
   const H = el.clientHeight || 530;
 
   _graph3d = ForceGraph3D({ antialias: true, alpha: true })(el)
     .width(W).height(H)
-    .backgroundColor("rgba(0,0,0,0)")
+    .backgroundColor("#00000000")
     .showNavInfo(false)
-    .nodeLabel(n => `<div style="background:#0f172a;border:1px solid #334155;padding:4px 8px;border-radius:6px;font-size:12px;color:#e2e8f0;max-width:220px">${esc(n.label)}</div>`)
-    .nodeColor(_nodeColor)
-    .nodeVal(n => (_nodeRadius(n)) ** 2)
-    .nodeOpacity(0.92)
-    .nodeResolution(16)
-    .linkColor(() => 0x334155)
-    .linkWidth(0.5)
-    .linkOpacity(0.5)
-    .linkDirectionalParticles(1)
-    .linkDirectionalParticleWidth(1.2)
+    // Node rendering: custom sprite if THREE available, else colored sphere
+    .nodeThreeObject(node => {
+      const sprite = _makeNodeSprite(node);
+      return sprite || null;
+    })
+    .nodeThreeObjectExtend(false)
+    .nodeColor(node => NODE_COLORS[node.kind] || "#64748b")
+    .nodeVal(n => _nodeSize(n) ** 2)
+    .nodeOpacity(0.95)
+    .nodeResolution(12)
+    // Tooltip
+    .nodeLabel(n => {
+      const c = NODE_COLORS[n.kind] || "#64748b";
+      const lbl = KIND_LABELS[n.kind] || prettify(n.kind);
+      return `<div style="background:rgba(8,14,24,0.92);border:1px solid ${c}44;padding:6px 10px;border-radius:8px;font-size:12px;color:#e2e8f0;max-width:240px;line-height:1.4;box-shadow:0 4px 16px #00000080">
+        <span style="color:${c};font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase">${lbl}</span><br/>
+        ${esc(n.label)}
+      </div>`;
+    })
+    // Links: thin, near-transparent, particles for directionality
+    .linkColor(() => "#1e293b")
+    .linkWidth(0.4)
+    .linkOpacity(0.35)
+    .linkDirectionalParticles(2)
+    .linkDirectionalParticleWidth(0.8)
+    .linkDirectionalParticleSpeed(0.004)
     .linkDirectionalParticleColor(l => {
       const src = typeof l.source === "object" ? l.source : {};
-      return _nodeColor(src) || 0x22d3ee;
+      return NODE_COLORS[src.kind] || "#38bdf8";
     })
+    // Interaction
     .onNodeClick(node => showNodeDetail(node))
+    .onNodeHover(node => { el.style.cursor = node ? "pointer" : "grab"; })
     .graphData({ nodes: [], links: [] });
 
-  // Make background transparent (canvas style)
+  // Transparent background + pixel ratio
   const renderer = _graph3d.renderer();
-  if (renderer) { renderer.setClearAlpha(0); renderer.setPixelRatio(window.devicePixelRatio); }
+  if (renderer) {
+    renderer.setClearAlpha(0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  }
+
+  // Looser physics — more space between nodes
+  _graph3d.d3Force("charge").strength(-120);
+  _graph3d.d3Force("link").distance(60);
 
   _graphNodeIds = new Set();
 }
@@ -429,6 +515,12 @@ function drawGraph(graph) {
 
   _graph3d.graphData({ nodes: mergedNodes, links: mergedLinks });
   newNodes.forEach(n => existingIds.add(n.id));
+
+  // Auto-fit camera after first non-trivial batch so graph fills the viewport
+  if (!_graphAutoFit && mergedNodes.length >= 3) {
+    _graphAutoFit = true;
+    setTimeout(() => _graph3d.zoomToFit(800, 80), 1200);
+  }
 }
 
 function showNodeDetail(d) {

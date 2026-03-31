@@ -343,45 +343,46 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(8,8,20,0.5);
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  background: rgba(5,8,18,0.8);
+  backdrop-filter: blur(8px);
 }
 
 .graph-tabs {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   flex-wrap: wrap;
 }
 
 .graph-tab {
-  padding: 5px 11px;
-  border-radius: 7px;
-  font-size: 0.72rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   background: transparent;
   color: var(--muted);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: all 140ms;
+  transition: all 120ms;
 }
 
 .graph-tab:hover {
   color: var(--text);
-  background: var(--surface);
+  background: rgba(255,255,255,0.05);
 }
 
 .graph-tab.active {
-  color: var(--cyan);
-  background: var(--cyan-dim);
-  border-color: rgba(34,211,238,0.25);
+  color: #38bdf8;
+  background: rgba(56,189,248,0.10);
+  border-color: rgba(56,189,248,0.20);
 }
 
 .graph-legend {
   display: flex;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
 }
@@ -389,15 +390,16 @@ button {
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.7rem;
-  color: var(--muted);
+  gap: 4px;
+  font-size: 0.65rem;
+  color: rgba(148,163,184,0.7);
   font-weight: 500;
+  letter-spacing: 0.03em;
 }
 
 .legend-color {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -405,6 +407,19 @@ button {
 .graph-wrap {
   position: relative;
   height: 530px;
+  background: radial-gradient(ellipse at 50% 50%, #05080f 0%, #02040a 100%);
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+}
+
+/* Subtle vignette over the 3D canvas */
+.graph-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(2,4,10,0.6) 100%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 #graph-canvas {
@@ -472,15 +487,21 @@ button {
   position: absolute;
   right: 14px;
   top: 14px;
-  width: 240px;
-  background: rgba(8,8,20,0.97);
-  border: 1px solid var(--border2);
-  border-radius: var(--radius-lg);
+  width: 248px;
+  background: rgba(6,10,20,0.96);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
   padding: 14px;
   display: none;
-  z-index: 20;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
-  backdrop-filter: blur(20px);
+  z-index: 30;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+  backdrop-filter: blur(24px);
+  animation: nd-in 0.18s ease;
+}
+
+@keyframes nd-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
 #node-detail.open { display: block; }
