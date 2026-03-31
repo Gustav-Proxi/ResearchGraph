@@ -14,10 +14,18 @@ from .tracing import TraceBridge
 
 
 class AgentRuntime:
-    def __init__(self, *, trace_base_url: Optional[str] = None, model_settings_resolver: Optional[Callable[[], Dict[str, object]]] = None) -> None:
+    def __init__(
+        self,
+        *,
+        trace_base_url: Optional[str] = None,
+        model_settings_resolver: Optional[Callable[[], Dict[str, object]]] = None,
+        checkpoint_fn: Optional[Callable[[RuntimeRun], None]] = None,
+    ) -> None:
         self._toolbox = ResearchToolbox(llm=None)
         self._trace = TraceBridge(base_url=trace_base_url)
         self._model_settings_resolver = model_settings_resolver or (lambda: {})
+        # Called after each stage completes — used by persistence layer for checkpointing
+        self._checkpoint_fn = checkpoint_fn
 
     def execute(
         self,
@@ -26,6 +34,7 @@ class AgentRuntime:
         objective: str = "",
         learning_context: Optional[Dict[str, object]] = None,
         run_ref: Optional[RuntimeRun] = None,
+        resume_from: Optional[str] = None,
     ) -> tuple[RuntimeRun, ResearchProject]:
         snapshot = deepcopy(project)
         settings = self._model_settings_resolver()
@@ -49,6 +58,9 @@ class AgentRuntime:
                 learning_context=deepcopy(learning_context or {}),
             )
 
+        # Determine which stages have already completed (for resume)
+        completed_stage_ids = {s.stage_id for s in run.stages if s.status == "completed"}
+
         with self._trace.run_scope(
             f"{snapshot.name} runtime",
             metadata={"project_id": snapshot.id, "objective": run.objective},
@@ -58,7 +70,19 @@ class AgentRuntime:
                 make_timeline_event(run.id, "system", "Runtime", "run_started", "ResearchGraph runtime started.")
             )
             for stage in self._ordered_stages(snapshot.agents):
+                if stage.id in completed_stage_ids:
+                    # Skip already-completed stages on resume
+                    continue
                 self._execute_stage(snapshot, stage, run, llm)
+                if self._checkpoint_fn is not None:
+                    try:
+                        self._checkpoint_fn(run)
+                    except Exception:
+                        pass  # checkpoint failures must not abort the run
+
+            # Attach LLM generation log to artifacts
+            log_payload = self._toolbox.llm_generation_log()
+            run.artifacts.update(log_payload)
 
             run.status = "completed"
             run.finished_at = utc_now()
@@ -73,13 +97,14 @@ class AgentRuntime:
                 "applied_learning_lessons": sum(len(stage.learning_applied) for stage in run.stages),
                 "selected_decision": judged.get("decision_title", ""),
                 "trace_run_id": run.trace_run_id,
+                "llm_success_rate": log_payload.get("llm_generation_summary", {}).get("success_rate", 0.0),
             }
             run.timeline.append(
                 make_timeline_event(run.id, "system", "Runtime", "run_finished", "ResearchGraph runtime completed.", run.summary)
             )
         return run, snapshot
 
-    def _execute_stage(self, project: ResearchProject, stage: AgentStage, run: RuntimeRun, llm: LLMRouter) -> None:
+    def _execute_stage(self, project: ResearchProject, stage: AgentStage, run: RuntimeRun, llm: LLMRouter = None) -> None:
         execution = StageExecution(
             stage_id=stage.id,
             stage_name=stage.name,
@@ -129,30 +154,13 @@ class AgentRuntime:
                 )
 
             payload = self._run_stage_tool(project, stage, run, stage_guidance)
-            llm_result = llm.generate_stage_text(
-                stage.id,
-                stage.name,
-                stage.role,
-                {
-                    "domain": project.domain,
-                    "problem": project.problem,
-                    "artifact_keys": sorted(run.artifacts.keys()),
-                    "active_policies": run.learning_context.get("active_policies", []),
-                    "stage_guidance": stage_guidance,
-                    "payload_preview": {key: _preview(value) for key, value in payload.items()},
-                },
-            )
-            execution.model_provider = llm_result["provider"]
-            execution.model_name = llm_result["model"]
-            execution.model_mode = llm_result["mode"]
-            execution.model_error = llm_result["error"]
-            if llm_result["text"]:
-                payload[f"{stage.id}_model_note"] = {
-                    "provider": llm_result["provider"],
-                    "model": llm_result["model"],
-                    "mode": llm_result["mode"],
-                    "text": llm_result["text"],
-                }
+            # Record which model/provider the toolbox used (from the log, not a second LLM call)
+            last_log = self._toolbox.last_llm_log_entry()
+            if last_log:
+                execution.model_provider = last_log.get("provider", "")
+                execution.model_name     = last_log.get("model", "")
+                execution.model_mode     = last_log.get("mode", "")
+                execution.model_error    = last_log.get("error", "")
             for artifact_name, artifact_value in payload.items():
                 if artifact_name == "memory_graph":
                     run.memory.extend(make_memory_entries(run.id, artifact_value))
@@ -198,21 +206,30 @@ class AgentRuntime:
             if stage.id == "agent-evidence":
                 return self._apply_learning_to_payload(self._toolbox.evidence_discovery(project), stage, run, stage_guidance)
             if stage.id == "agent-planning-graph":
-                return self._apply_learning_to_payload(self._toolbox.planning_graph(project), stage, run, stage_guidance)
+                return self._apply_learning_to_payload(
+                    self._toolbox.planning_graph(project, learning_context=run.learning_context),
+                    stage, run, stage_guidance,
+                )
             if stage.id == "agent-survey":
                 return self._apply_learning_to_payload(self._toolbox.survey(project), stage, run, stage_guidance)
             if stage.id == "agent-planner":
                 return self._apply_learning_to_payload(self._toolbox.proposal_options(project, run.artifacts), stage, run, stage_guidance)
             if stage.id == "agent-critic":
-                return self._apply_learning_to_payload(self._toolbox.critique(run.artifacts), stage, run, stage_guidance)
+                return self._apply_learning_to_payload(self._toolbox.critique(project, run.artifacts), stage, run, stage_guidance)
             if stage.id == "agent-grounding":
                 return self._apply_learning_to_payload(self._toolbox.grounding(project, run.artifacts), stage, run, stage_guidance)
             if stage.id == "agent-judge":
                 return self._apply_learning_to_payload(self._toolbox.judge(run.artifacts), stage, run, stage_guidance)
+            if stage.id == "agent-codegen":
+                return self._apply_learning_to_payload(self._toolbox.generate_experiment_code(project, run.artifacts), stage, run, stage_guidance)
             if stage.id == "agent-executor":
                 return self._apply_learning_to_payload(self._toolbox.execute_experiments(project, run.artifacts), stage, run, stage_guidance)
             if stage.id == "agent-memory":
-                return self._apply_learning_to_payload(self._toolbox.build_memory(project, run.artifacts), stage, run, stage_guidance)
+                payload = self._toolbox.build_memory(project, run.artifacts)
+                # Also validate hypotheses against experiments
+                validation = self._toolbox.update_hypotheses_from_experiments(run.artifacts)
+                payload.update(validation)
+                return self._apply_learning_to_payload(payload, stage, run, stage_guidance)
             if stage.id == "agent-coordinator":
                 return self._apply_learning_to_payload(self._toolbox.coordinate_vote(project, run.artifacts), stage, run, stage_guidance)
             if stage.id == "agent-novelty":
@@ -220,7 +237,10 @@ class AgentRuntime:
             if stage.id == "agent-writer":
                 return self._apply_learning_to_payload(self._toolbox.report(project, run.artifacts), stage, run, stage_guidance)
             if "planning" in role:
-                return self._apply_learning_to_payload(self._toolbox.planning_graph(project), stage, run, stage_guidance)
+                return self._apply_learning_to_payload(
+                    self._toolbox.planning_graph(project, learning_context=run.learning_context),
+                    stage, run, stage_guidance,
+                )
             return self._apply_learning_to_payload({}, stage, run, stage_guidance)
 
     def _apply_learning_to_payload(self, payload: dict, stage: AgentStage, run: RuntimeRun, stage_guidance: List[str]) -> dict:
@@ -275,7 +295,7 @@ class AgentRuntime:
         for stage in stages:
             sorter.add(stage.id, *stage.depends_on)
         ordered_ids = tuple(sorter.static_order())
-        return [by_id[stage_id] for stage_id in ordered_ids]
+        return [by_id[stage_id] for stage_id in ordered_ids if stage_id in by_id]
 
 
 def _preview(value):

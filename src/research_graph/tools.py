@@ -9,7 +9,6 @@ from typing import Dict, List, Optional
 from .graphs import build_experiment_graph, build_report_graph
 from .models import ExperimentRun, NoveltyHypothesis, Paper, ResearchProject
 from .runtime_models import RunMemoryEntry, SwarmMessage, TimelineEvent
-from .turboquant import TurboQuant
 
 
 # ── JSON extraction from LLM text ────────────────────────────────────────────
@@ -18,14 +17,12 @@ def _extract_json(text: str) -> Optional[dict]:
     """Try to extract the first JSON object from an LLM response."""
     if not text:
         return None
-    # Try ```json ... ``` block first
     block = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if block:
         try:
             return json.loads(block.group(1))
         except Exception:
             pass
-    # Try first top-level { ... }
     brace = re.search(r"\{.*\}", text, re.DOTALL)
     if brace:
         try:
@@ -43,8 +40,9 @@ def _paper_digest(papers: List[Paper], max_papers: int = 12) -> List[dict]:
             "title": p.title,
             "year": p.year,
             "citations": p.citations,
-            "abstract": p.abstract[:300],
+            "abstract": p.abstract[:400],
             "keywords": p.keywords[:5],
+            "url": p.url,
         }
         for p in top
     ]
@@ -54,22 +52,55 @@ def _paper_digest(papers: List[Paper], max_papers: int = 12) -> List[dict]:
 
 class ResearchToolbox:
     def __init__(self, llm=None, embedder=None) -> None:
+        from .turboquant import TurboQuant
         self._turboquant = TurboQuant(embedder=embedder)
         self._llm = llm  # Optional[LLMRouter]
+        self._llm_log: List[dict] = []  # per-run generation log
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
     def _call_llm(self, stage_id: str, stage_name: str, role: str, prompt: str) -> Optional[dict]:
-        """Call LLM with a JSON-requesting prompt. Returns parsed dict or None."""
+        """Call LLM with a JSON-requesting prompt. Returns parsed dict or None.
+        Always records the attempt (success or failure) in self._llm_log."""
         if self._llm is None:
             return None
         result = self._llm.generate_stage_text(
             stage_id, stage_name, role,
             {"__direct_prompt__": prompt},
         )
+        log_entry = {
+            "stage_id": stage_id,
+            "provider": result.get("provider", ""),
+            "model": result.get("model", ""),
+            "mode": result.get("mode", ""),
+            "error": result.get("error", ""),
+            "success": not result.get("error") and bool(result.get("text")),
+        }
+        self._llm_log.append(log_entry)
         if result.get("error") or not result.get("text"):
             return None
         return _extract_json(result["text"])
+
+    def _call_llm_text(self, stage_id: str, stage_name: str, role: str, prompt: str) -> Optional[str]:
+        """Call LLM and return raw text (not parsed JSON). Logs the attempt."""
+        if self._llm is None:
+            return None
+        result = self._llm.generate_stage_text(
+            stage_id, stage_name, role,
+            {"__direct_prompt__": prompt},
+        )
+        log_entry = {
+            "stage_id": stage_id,
+            "provider": result.get("provider", ""),
+            "model": result.get("model", ""),
+            "mode": result.get("mode", ""),
+            "error": result.get("error", ""),
+            "success": not result.get("error") and bool(result.get("text")),
+        }
+        self._llm_log.append(log_entry)
+        if result.get("error") or not result.get("text"):
+            return None
+        return result["text"].strip()
 
     # ── stage tools ───────────────────────────────────────────────────────────
 
@@ -88,18 +119,31 @@ class ResearchToolbox:
         }
 
     def evidence_discovery(self, project: ResearchProject) -> dict:
-        """Search Semantic Scholar for real papers; fall back to seeds on failure."""
+        """Search Semantic Scholar + arXiv for real papers; optionally ingest PDFs for top results."""
         from .paper_search import search_papers
 
-        # Build a focused query: domain + first 6 content words from problem
         query = f"{project.domain} {project.problem}"
         live_papers = search_papers(query, limit=20)
 
         if live_papers:
-            # Merge live papers with any existing seeds (deduplicate by title)
             existing_titles = {p.title.lower() for p in project.papers}
             new_papers = [p for p in live_papers if p.title.lower() not in existing_titles]
             project.papers = project.papers + new_papers
+
+        # Optionally enrich top arXiv papers with full text via PDF ingestion
+        pdf_ingested = 0
+        try:
+            from .pdf_ingestion import ingest_pdf
+            for paper in project.papers[:3]:
+                if paper.url and "arxiv.org" in paper.url and len(paper.abstract) < 500:
+                    pdf_url = paper.url.replace("/abs/", "/pdf/")
+                    sections = ingest_pdf(pdf_url, max_chars=8000)
+                    if sections:
+                        combined = " ".join(s.text[:600] for s in sections[:3])
+                        paper.abstract = (paper.abstract + " " + combined).strip()[:2000]
+                        pdf_ingested += 1
+        except Exception:
+            pass
 
         ranked = self._turboquant.rank_papers(project, limit=min(8, len(project.papers)))
         themes = Counter(keyword for paper in project.papers for keyword in paper.keywords)
@@ -109,16 +153,27 @@ class ResearchToolbox:
                 "theme_counts": dict(themes.most_common(10)),
                 "total_papers": len(project.papers),
                 "live_papers_found": len(live_papers),
+                "pdf_ingested": pdf_ingested,
+                "sources": list({p.venue for p in live_papers}),
             }
         }
 
-    def planning_graph(self, project: ResearchProject) -> dict:
+    def planning_graph(self, project: ResearchProject, learning_context: Optional[Dict] = None) -> dict:
+        prior_runs = (learning_context or {}).get("prior_run_count", 0)
+        lessons = (learning_context or {}).get("active_policies", [])
+
+        def _task_label(base: str) -> str:
+            if prior_runs > 0 and lessons:
+                return f"{base} [adapted from {prior_runs} prior run(s)]"
+            return base
+
         tasks = [
-            {"id": "task-literature", "label": "Survey prior work", "depends_on": []},
-            {"id": "task-options", "label": "Propose competing research options", "depends_on": ["task-literature"]},
-            {"id": "task-decision", "label": "Critique, ground, vote, and judge", "depends_on": ["task-options"]},
-            {"id": "task-experiments", "label": "Execute the judged direction", "depends_on": ["task-decision"]},
-            {"id": "task-writing", "label": "Assemble report from judged outputs", "depends_on": ["task-experiments"]},
+            {"id": "task-literature", "label": _task_label("Survey prior work"), "depends_on": []},
+            {"id": "task-options", "label": _task_label("Propose competing research options"), "depends_on": ["task-literature"]},
+            {"id": "task-decision", "label": _task_label("Critique, ground, vote, and judge"), "depends_on": ["task-options"]},
+            {"id": "task-codegen", "label": _task_label("Generate experiment code for judged direction"), "depends_on": ["task-decision"]},
+            {"id": "task-experiments", "label": _task_label("Execute the judged direction"), "depends_on": ["task-codegen"]},
+            {"id": "task-writing", "label": _task_label("Assemble report from judged outputs"), "depends_on": ["task-experiments"]},
         ]
         return {
             "task_graph": tasks,
@@ -127,8 +182,11 @@ class ResearchToolbox:
                 {"from": "critic", "to": "grounding", "condition": "major assumptions and risks enumerated"},
                 {"from": "grounding", "to": "coordinator", "condition": "evidence links and support scores available"},
                 {"from": "coordinator", "to": "judge", "condition": "weighted scorecards computed"},
-                {"from": "judge", "to": "writer", "condition": "decision finalized and guardrails set"},
+                {"from": "judge", "to": "codegen", "condition": "direction finalized"},
+                {"from": "codegen", "to": "writer", "condition": "experiment code generated and run"},
             ],
+            "prior_runs": prior_runs,
+            "applied_lessons": lessons[:3],
         }
 
     def survey(self, project: ResearchProject) -> dict:
@@ -147,9 +205,10 @@ class ResearchToolbox:
             )
             parsed = self._call_llm("agent-survey", "Survey Agent", "literature-synthesis", prompt)
             if parsed and "literature_survey" in parsed and "gap_analysis" in parsed:
-                survey_lines = [str(s) for s in parsed["literature_survey"]]
-                gaps = [str(g) for g in parsed["gap_analysis"]]
-                return {"literature_survey": survey_lines, "gap_analysis": gaps}
+                return {
+                    "literature_survey": [str(s) for s in parsed["literature_survey"]],
+                    "gap_analysis": [str(g) for g in parsed["gap_analysis"]],
+                }
 
         # Fallback: derive from actual papers
         ranked = self._turboquant.rank_papers(project, limit=5)
@@ -199,14 +258,13 @@ class ResearchToolbox:
                         "execution_risk": float(opt.get("execution_risk", 0.35)),
                         "anchors": list(opt.get("anchors", anchors[:2])),
                     })
-                plan = [
-                    "Propose multiple candidate research directions before committing.",
-                    "Score each option on grounding, feasibility, novelty, and execution risk.",
-                    "Require a judged winner before experiments and writing.",
-                ]
                 return {
                     "proposal_options": options,
-                    "implementation_plan": plan,
+                    "implementation_plan": [
+                        "Propose multiple candidate research directions before committing.",
+                        "Score each option on grounding, feasibility, novelty, and execution risk.",
+                        "Require a judged winner before experiments and writing.",
+                    ],
                     "experiment_graph": build_experiment_graph(project).to_dict(),
                 }
 
@@ -246,55 +304,116 @@ class ResearchToolbox:
                 "anchors": anchors[1:5],
             },
         ]
-        plan = [
-            "Propose multiple candidate research directions before committing to one.",
-            "Score each option on grounding, feasibility, novelty, and execution risk.",
-            "Require a judged winner before experiments and writing.",
-            "Carry decision rationale into experiments and report sections.",
-        ]
         return {
             "proposal_options": options,
-            "implementation_plan": plan,
+            "implementation_plan": [
+                "Propose multiple candidate research directions before committing to one.",
+                "Score each option on grounding, feasibility, novelty, and execution risk.",
+                "Require a judged winner before experiments and writing.",
+                "Carry decision rationale into experiments and report sections.",
+            ],
             "experiment_graph": build_experiment_graph(project).to_dict(),
         }
 
-    def critique(self, artifacts: Dict[str, object]) -> dict:
-        critique_items = []
-        for option in artifacts.get("proposal_options", []):
-            challenge = round(min(0.92, option["execution_risk"] * 0.9 + (1 - option["evidence_fit"]) * 0.45), 2)
-            critique_items.append(
-                {
-                    "option_id": option["id"],
-                    "title": option["title"],
-                    "challenge_score": challenge,
-                    "objections": [
-                        "May over-claim novelty unless evidence links are explicit.",
-                        "Needs clearer benchmark and stop conditions before execution.",
-                        "Tool and coordination complexity could outgrow initial scope."
-                        if option["execution_risk"] > 0.4
-                        else "Scope appears manageable with disciplined execution boundaries.",
-                    ],
-                    "recommended_guardrail": "Require a judged decision plus evidence threshold before writing.",
-                }
+    def critique(self, project: ResearchProject, artifacts: Dict[str, object]) -> dict:
+        """Critique proposed options. Uses LLM if available; formulas otherwise."""
+        options = artifacts.get("proposal_options", [])
+        gaps = artifacts.get("gap_analysis", [])
+        digest = _paper_digest(project.papers, max_papers=6)
+
+        if self._llm and options:
+            prompt = (
+                f"You are a research critic. Domain: '{project.domain}'. "
+                f"Problem: '{project.problem}'.\n\n"
+                f"Proposed research options:\n{json.dumps(options, indent=2)}\n\n"
+                f"Literature gaps:\n{json.dumps(gaps, indent=2)}\n\n"
+                f"Top papers:\n{json.dumps(digest, indent=2)}\n\n"
+                "For each option, identify its key weaknesses, risks, and objections.\n"
+                "Be adversarial — challenge assumptions and point out where evidence is thin.\n"
+                "Return ONLY valid JSON:\n"
+                '{"critiques": [{"option_id": "...", "challenge_score": 0.4, '
+                '"objections": ["...", "..."], "recommended_guardrail": "..."}]}'
             )
+            parsed = self._call_llm("agent-critic", "Critic Agent", "critique", prompt)
+            if parsed and "critiques" in parsed and len(parsed["critiques"]) >= 2:
+                critique_items = []
+                for c in parsed["critiques"]:
+                    critique_items.append({
+                        "option_id": str(c.get("option_id", "")),
+                        "title": next((o["title"] for o in options if o["id"] == c.get("option_id")), ""),
+                        "challenge_score": float(c.get("challenge_score", 0.4)),
+                        "objections": [str(o) for o in (c.get("objections") or [])[:4]],
+                        "recommended_guardrail": str(c.get("recommended_guardrail", "")),
+                    })
+                return {"critique_report": critique_items}
+
+        # Fallback: formula-based
+        critique_items = []
+        for option in options:
+            challenge = round(min(0.92, option["execution_risk"] * 0.9 + (1 - option["evidence_fit"]) * 0.45), 2)
+            critique_items.append({
+                "option_id": option["id"],
+                "title": option["title"],
+                "challenge_score": challenge,
+                "objections": [
+                    "May over-claim novelty unless evidence links are explicit.",
+                    "Needs clearer benchmark and stop conditions before execution.",
+                    "Tool and coordination complexity could outgrow initial scope."
+                    if option["execution_risk"] > 0.4
+                    else "Scope appears manageable with disciplined execution boundaries.",
+                ],
+                "recommended_guardrail": "Require a judged decision plus evidence threshold before writing.",
+            })
         return {"critique_report": critique_items}
 
     def grounding(self, project: ResearchProject, artifacts: Dict[str, object]) -> dict:
+        """Ground options against evidence. Uses LLM if available; formulas otherwise."""
+        options = artifacts.get("proposal_options", [])
         theme_counts = artifacts.get("paper_graph", {}).get("theme_counts", {})
         dominant_themes = sorted(theme_counts, key=theme_counts.get, reverse=True)[:5]
-        checks = []
-        for option in artifacts.get("proposal_options", []):
-            support = round(min(0.97, option["evidence_fit"] + 0.05 * min(3, len(option.get("anchors", [])))), 2)
-            checks.append(
-                {
-                    "option_id": option["id"],
-                    "support_score": support,
-                    "coverage_score": round(min(0.95, 0.52 + len(option.get("anchors", [])) * 0.08), 2),
-                    "dominant_themes": dominant_themes,
-                    "supported_by": option.get("anchors", []),
-                    "verdict": "grounded" if support >= 0.7 else "weakly-grounded",
-                }
+        digest = _paper_digest(project.papers, max_papers=8)
+
+        if self._llm and options and digest:
+            prompt = (
+                f"You are a research grounding agent. Domain: '{project.domain}'.\n\n"
+                f"Proposed options:\n{json.dumps([{'id': o['id'], 'title': o['title'], 'approach': o.get('approach', ''), 'anchors': o.get('anchors', [])} for o in options], indent=2)}\n\n"
+                f"Available papers:\n{json.dumps(digest, indent=2)}\n\n"
+                "For each option, score how well the available literature supports it.\n"
+                "Cite specific paper titles as evidence.\n"
+                "Return ONLY valid JSON:\n"
+                '{"groundings": [{"option_id": "...", "support_score": 0.8, '
+                '"coverage_score": 0.7, "supported_by": ["paper title 1", "paper title 2"], '
+                '"verdict": "grounded", "evidence_note": "..."}]}'
             )
+            parsed = self._call_llm("agent-grounding", "Grounding Agent", "evidence-grounding", prompt)
+            if parsed and "groundings" in parsed and len(parsed["groundings"]) >= 2:
+                checks = []
+                for g in parsed["groundings"]:
+                    support = float(g.get("support_score", 0.7))
+                    checks.append({
+                        "option_id": str(g.get("option_id", "")),
+                        "support_score": round(min(0.97, support), 2),
+                        "coverage_score": round(min(0.95, float(g.get("coverage_score", 0.65))), 2),
+                        "dominant_themes": dominant_themes,
+                        "supported_by": [str(t) for t in (g.get("supported_by") or [])[:5]],
+                        "verdict": "grounded" if support >= 0.7 else "weakly-grounded",
+                        "evidence_note": str(g.get("evidence_note", "")),
+                    })
+                return {"grounding_report": checks}
+
+        # Fallback: formula-based
+        checks = []
+        for option in options:
+            support = round(min(0.97, option["evidence_fit"] + 0.05 * min(3, len(option.get("anchors", [])))), 2)
+            checks.append({
+                "option_id": option["id"],
+                "support_score": support,
+                "coverage_score": round(min(0.95, 0.52 + len(option.get("anchors", [])) * 0.08), 2),
+                "dominant_themes": dominant_themes,
+                "supported_by": option.get("anchors", []),
+                "verdict": "grounded" if support >= 0.7 else "weakly-grounded",
+                "evidence_note": "",
+            })
         return {"grounding_report": checks}
 
     def novelty(self, project: ResearchProject, artifacts: Dict[str, object]) -> dict:
@@ -378,17 +497,15 @@ class ResearchToolbox:
                 - weights["risk_penalty"] * critique,
                 3,
             )
-            scorecards.append(
-                {
-                    "option_id": option["id"],
-                    "title": option["title"],
-                    "score": total,
-                    "grounding": groundedness,
-                    "feasibility": option["feasibility"],
-                    "novelty": novelty_bonus,
-                    "risk_penalty": critique,
-                }
-            )
+            scorecards.append({
+                "option_id": option["id"],
+                "title": option["title"],
+                "score": total,
+                "grounding": groundedness,
+                "feasibility": option["feasibility"],
+                "novelty": novelty_bonus,
+                "risk_penalty": critique,
+            })
         scorecards.sort(key=lambda item: item["score"], reverse=True)
         return {
             "coordination_topology": {
@@ -402,7 +519,7 @@ class ResearchToolbox:
             },
             "agent_routes": [
                 "planner -> critic -> grounding -> novelty -> coordinator",
-                "coordinator -> judge -> executor -> memory -> writer",
+                "coordinator -> judge -> codegen -> executor -> memory -> writer",
             ],
             "vote_board": {
                 "weights": weights,
@@ -438,6 +555,7 @@ class ResearchToolbox:
             "selected_option_id": option["id"],
             "decision_title": option["title"],
             "summary": option["summary"],
+            "approach": option.get("approach", ""),
             "rationale": (
                 f"Selected because it balanced grounding={support.get('support_score', 0.0)}, "
                 f"feasibility={option['feasibility']}, novelty={chosen['novelty']}, and "
@@ -450,6 +568,8 @@ class ResearchToolbox:
             ],
             "vote_score": chosen["score"],
             "grounding_score": support.get("support_score", 0.0),
+            "evidence_note": support.get("evidence_note", ""),
+            "supported_by": support.get("supported_by", []),
         }
         return {
             "judged_decision": judged,
@@ -460,17 +580,62 @@ class ResearchToolbox:
             },
         }
 
+    def generate_experiment_code(self, project: ResearchProject, artifacts: Dict[str, object]) -> dict:
+        """Generate runnable Python experiment code for the judged direction via LLM.
+        Falls back to a benchmark stub if LLM is unavailable."""
+        from .codegen import generate_and_run
+
+        judged = artifacts.get("judged_decision", {})
+        if not judged or judged.get("status") != "approved":
+            return {"codegen_result": {"status": "skipped", "reason": "No approved judged decision."}}
+
+        direction = judged.get("decision_title", "")
+        approach = judged.get("approach", direction)
+        survey = artifacts.get("literature_survey", [])
+        gaps = artifacts.get("gap_analysis", [])
+
+        code_spec: Optional[str] = None
+        if self._llm:
+            prompt = (
+                f"You are a research engineer. Write a SELF-CONTAINED Python experiment script.\n\n"
+                f"Research direction: '{direction}'\n"
+                f"Approach: '{approach}'\n"
+                f"Key gaps to address: {json.dumps(gaps[:3], indent=2)}\n"
+                f"Literature context: {json.dumps(survey[:3], indent=2)}\n\n"
+                "Rules:\n"
+                "- Use ONLY Python stdlib + numpy (no other imports)\n"
+                "- Script must run in under 20 seconds\n"
+                "- Print metrics as JSON on the last line: {\"metric_name\": value}\n"
+                "- Include at least 2 measurable metrics\n"
+                "- The experiment must directly probe the research direction\n\n"
+                "Return ONLY the raw Python code (no markdown, no ```python fence)."
+            )
+            code_spec = self._call_llm_text("agent-codegen", "Code Gen Agent", "code-generation", prompt)
+
+        result = generate_and_run(direction, approach, code_spec)
+        return {"codegen_result": result}
+
     def execute_experiments(self, project: ResearchProject, artifacts: Dict[str, object]) -> dict:
+        """Run experiments. Uses generated code results if available; otherwise a minimal simulation."""
         judged = artifacts.get("judged_decision", {})
         selected_title = judged.get("decision_title", "Unjudged Direction")
+        codegen_result = artifacts.get("codegen_result", {})
+        live_metrics = codegen_result.get("metrics", {}) if isinstance(codegen_result, dict) else {}
+
         updated: List[ExperimentRun] = []
         for experiment in deepcopy(project.experiments):
             experiment.status = "completed"
-            experiment.metrics = {
-                key: round(value + 0.04, 3) if value < 1 else value
-                for key, value in experiment.metrics.items()
-            }
+            if live_metrics:
+                # Blend live metrics into experiment metrics
+                for key, value in live_metrics.items():
+                    experiment.metrics[key] = round(float(value), 4) if isinstance(value, (int, float)) else value
+            else:
+                # Minimal simulation: add grounding signal only
+                for key, value in list(experiment.metrics.items()):
+                    if isinstance(value, float) and value < 1.0:
+                        experiment.metrics[key] = round(value + 0.04, 3)
             experiment.metrics["decision_alignment"] = round(judged.get("grounding_score", 0.0), 3)
+            experiment.metrics["code_executed"] = bool(live_metrics)
             updated.append(experiment)
         project.experiments = updated
         return {
@@ -479,57 +644,116 @@ class ResearchToolbox:
                 "completed": len(updated),
                 "best_experiment": updated[0].name if updated else "",
                 "decision_title": selected_title,
+                "code_executed": bool(live_metrics),
+                "live_metrics": live_metrics,
+                "codegen_status": codegen_result.get("status", "skipped") if isinstance(codegen_result, dict) else "skipped",
             },
         }
 
     def build_memory(self, project: ResearchProject, artifacts: Dict[str, object]) -> dict:
+        """Build memory graph derived from actual run artifacts."""
         judged = artifacts.get("judged_decision", {})
-        entries = [
-            {
-                "kind": "paper-anchor",
-                "title": "Graph taxonomy anchor",
-                "content": "Use planning/execution/memory/coordination as persistent axes.",
-                "linked_ids": ["paper-graphs-meet-agents"],
-            },
-            {
+        gaps = artifacts.get("gap_analysis", [])
+        novelty_hypotheses = artifacts.get("novelty_hypotheses", [])
+        experiment_summary = artifacts.get("experiment_summary", {})
+        literature_survey = artifacts.get("literature_survey", [])
+        codegen = artifacts.get("codegen_result", {})
+
+        entries = []
+
+        # Evidence anchors from actual ranked papers
+        paper_graph = artifacts.get("paper_graph", {})
+        anchors = paper_graph.get("anchors", [])
+        for anchor in anchors[:3]:
+            title = anchor.get("title", "")
+            if title:
+                entries.append({
+                    "kind": "paper-anchor",
+                    "title": f"Evidence anchor: {title[:60]}",
+                    "content": f"Ranked paper: {title} ({anchor.get('year', '')}), citations: {anchor.get('citations', 0)}",
+                    "linked_ids": [anchor.get("id", "")],
+                })
+
+        # Gap-derived principles
+        for i, gap in enumerate(gaps[:2]):
+            entries.append({
+                "kind": "gap-principle",
+                "title": f"Gap {i+1}: {str(gap)[:50]}",
+                "content": str(gap),
+                "linked_ids": ["artifact-survey"],
+            })
+
+        # Decision record
+        if judged and judged.get("status") == "approved":
+            entries.append({
+                "kind": "decision-record",
+                "title": judged.get("decision_title", "Judged Direction"),
+                "content": judged.get("rationale", ""),
+                "linked_ids": ["artifact-decision"] + judged.get("supported_by", [])[:2],
+            })
+            entries.append({
                 "kind": "decision-principle",
                 "title": "Judge after evidence review",
                 "content": "Do not let the writer or executor move before critique, grounding, and weighted voting are complete.",
                 "linked_ids": ["artifact-decision"],
-            },
-            {
+            })
+
+        # Novelty hypotheses
+        for h in novelty_hypotheses[:2]:
+            entries.append({
+                "kind": "novelty-hypothesis",
+                "title": h.get("title", "")[:60],
+                "content": h.get("summary", ""),
+                "linked_ids": h.get("supporting_facets", [])[:2],
+            })
+
+        # Experiment insights
+        if experiment_summary.get("code_executed"):
+            metrics_str = json.dumps(experiment_summary.get("live_metrics", {}))
+            entries.append({
                 "kind": "experiment-insight",
-                "title": "Topology routing matters",
-                "content": "Adaptive routing should be evaluated against fixed chains and star topologies.",
-                "linked_ids": ["experiment-topology-router"],
-            },
-            {
+                "title": f"Executed: {experiment_summary.get('best_experiment', 'experiment')[:40]}",
+                "content": f"Live code executed. Metrics: {metrics_str}",
+                "linked_ids": ["artifact-experiment"],
+            })
+        elif experiment_summary.get("completed", 0) > 0:
+            entries.append({
+                "kind": "experiment-insight",
+                "title": f"Simulation: {experiment_summary.get('best_experiment', 'experiment')[:40]}",
+                "content": f"Experiment simulation completed for '{experiment_summary.get('decision_title', '')}'.",
+                "linked_ids": ["artifact-experiment"],
+            })
+
+        # Code generation record
+        if codegen and isinstance(codegen, dict) and codegen.get("status") == "success":
+            entries.append({
+                "kind": "code-artifact",
+                "title": "Generated experiment code",
+                "content": f"Code generated and executed for: {judged.get('decision_title', '')}. Exit: {codegen.get('exit_code', 0)}",
+                "linked_ids": ["artifact-experiment", "agent-codegen"],
+            })
+
+        # Survey anchors
+        if literature_survey:
+            entries.append({
                 "kind": "writing-constraint",
                 "title": "Ground every section",
                 "content": "Each report section must link back to judged decisions, evidence, or experiment outputs.",
                 "linked_ids": ["report-related-work", "report-method", "report-results"],
-            },
-        ]
-        if judged:
-            entries.append(
-                {
-                    "kind": "decision-record",
-                    "title": judged.get("decision_title", "Judged Direction"),
-                    "content": judged.get("rationale", ""),
-                    "linked_ids": ["artifact-decision"],
-                }
-            )
+            })
+
         return {
             "memory_graph": entries,
             "evidence_context": {
                 "available_artifacts": sorted(artifacts.keys()),
                 "memory_principles": [entry["title"] for entry in entries],
                 "judged_decision": judged.get("decision_title", ""),
+                "entries_count": len(entries),
             },
         }
 
     def report(self, project: ResearchProject, artifacts: Dict[str, object]) -> dict:
-        """Write research report, using LLM if available."""
+        """Write research report with adversarial revision loop if LLM available."""
         judged = artifacts.get("judged_decision", {})
         if not judged or judged.get("status") != "approved":
             return {
@@ -542,32 +766,16 @@ class ResearchToolbox:
         literature_survey = artifacts.get("literature_survey", [])
         experiment_summary = artifacts.get("experiment_summary", {})
         novelty_hypotheses = artifacts.get("novelty_hypotheses", [])
+        codegen_result = artifacts.get("codegen_result", {})
         graph = build_report_graph(project).to_dict()
 
         if self._llm:
-            prompt = (
-                f"You are a research writer. Write a structured research report.\n\n"
-                f"Domain: '{project.domain}'\n"
-                f"Problem: '{project.problem}'\n"
-                f"Selected Direction: '{judged['decision_title']}'\n"
-                f"Rationale: '{judged['rationale']}'\n\n"
-                f"Literature survey:\n{json.dumps(literature_survey[:5], indent=2)}\n\n"
-                f"Novel hypotheses:\n{json.dumps([h.get('title','') + ': ' + h.get('summary','') for h in novelty_hypotheses[:3]], indent=2)}\n\n"
-                f"Experiment summary: {json.dumps(experiment_summary, indent=2)}\n\n"
-                "Write substantive, informative content for each section (2-4 sentences each).\n"
-                "Return ONLY valid JSON:\n"
-                '{"report-problem": "...", "report-related-work": "...", '
-                '"report-method": "...", "report-experiments": "...", "report-results": "..."}'
-            )
-            parsed = self._call_llm("agent-writer", "Writer Agent", "report-generation", prompt)
-            if parsed and "report-problem" in parsed:
-                drafts = {
-                    "report-problem": str(parsed.get("report-problem", "")),
-                    "report-related-work": str(parsed.get("report-related-work", "")),
-                    "report-method": str(parsed.get("report-method", "")),
-                    "report-experiments": str(parsed.get("report-experiments", "")),
-                    "report-results": str(parsed.get("report-results", "")),
-                }
+            drafts = self._write_draft(project, judged, literature_survey, novelty_hypotheses, experiment_summary, codegen_result)
+            if drafts:
+                # Adversarial revision loop
+                drafts, revision_count, objections = self._adversarial_revise(
+                    project, judged, drafts, literature_survey, experiment_summary
+                )
                 return {
                     "report_graph": graph,
                     "paper_draft": drafts,
@@ -576,13 +784,15 @@ class ResearchToolbox:
                         "sections": len(project.report_sections),
                         "draft_titles": [section.title for section in project.report_sections],
                         "decision_title": judged["decision_title"],
-                        "summary": drafts["report-results"],
+                        "summary": drafts.get("report-results", ""),
                         "guardrails": judged.get("guardrails", []),
                         "llm_generated": True,
+                        "revision_count": revision_count,
+                        "adversarial_objections": objections,
                     },
                 }
 
-        # Fallback: template-based report
+        # Fallback: template-based
         drafts = {
             "report-problem": f"Problem Framing: {project.problem}",
             "report-related-work": "Related Work: " + "; ".join(literature_survey[:3]),
@@ -592,7 +802,8 @@ class ResearchToolbox:
             ),
             "report-experiments": (
                 f"Experiments: executed against the judged direction with best experiment "
-                f"{experiment_summary.get('best_experiment', 'n/a')}."
+                f"{experiment_summary.get('best_experiment', 'n/a')}. "
+                f"Code executed: {experiment_summary.get('code_executed', False)}."
             ),
             "report-results": (
                 f"Results And Analysis: judged vote score={judged.get('vote_score', 0.0)}, "
@@ -613,6 +824,155 @@ class ResearchToolbox:
                     f"weighted coordination vote, and judge approval."
                 ),
                 "guardrails": judged.get("guardrails", []),
+                "revision_count": 0,
+                "adversarial_objections": [],
+                "llm_generated": False,
+            },
+        }
+
+    def _write_draft(
+        self,
+        project: ResearchProject,
+        judged: dict,
+        literature_survey: list,
+        novelty_hypotheses: list,
+        experiment_summary: dict,
+        codegen_result: dict,
+    ) -> Optional[dict]:
+        live_metrics = codegen_result.get("metrics", {}) if isinstance(codegen_result, dict) else {}
+        metrics_note = f"Live experiment metrics: {json.dumps(live_metrics)}" if live_metrics else "Metrics from simulation."
+        prompt = (
+            f"You are a research writer. Write a structured research report.\n\n"
+            f"Domain: '{project.domain}'\n"
+            f"Problem: '{project.problem}'\n"
+            f"Selected Direction: '{judged['decision_title']}'\n"
+            f"Rationale: '{judged['rationale']}'\n\n"
+            f"Literature survey:\n{json.dumps(literature_survey[:5], indent=2)}\n\n"
+            f"Novel hypotheses:\n{json.dumps([h.get('title', '') + ': ' + h.get('summary', '') for h in novelty_hypotheses[:3]], indent=2)}\n\n"
+            f"Experiment summary: {json.dumps(experiment_summary, indent=2)}\n"
+            f"{metrics_note}\n\n"
+            "Write substantive, informative content for each section (2-4 sentences each).\n"
+            "Ground every claim in the literature or experiments above.\n"
+            "Return ONLY valid JSON:\n"
+            '{"report-problem": "...", "report-related-work": "...", '
+            '"report-method": "...", "report-experiments": "...", "report-results": "..."}'
+        )
+        parsed = self._call_llm("agent-writer", "Writer Agent", "report-generation", prompt)
+        if parsed and "report-problem" in parsed:
+            return {
+                "report-problem": str(parsed.get("report-problem", "")),
+                "report-related-work": str(parsed.get("report-related-work", "")),
+                "report-method": str(parsed.get("report-method", "")),
+                "report-experiments": str(parsed.get("report-experiments", "")),
+                "report-results": str(parsed.get("report-results", "")),
+            }
+        return None
+
+    def _adversarial_revise(
+        self,
+        project: ResearchProject,
+        judged: dict,
+        drafts: dict,
+        literature_survey: list,
+        experiment_summary: dict,
+    ) -> tuple[dict, int, list]:
+        """Adversarial peer review: critique the draft, revise once if >1 objection found."""
+        if self._llm is None:
+            return drafts, 0, []
+
+        review_prompt = (
+            f"You are an adversarial peer reviewer for a research paper.\n\n"
+            f"Domain: '{project.domain}'. Problem: '{project.problem}'.\n"
+            f"Draft sections:\n{json.dumps(drafts, indent=2)}\n\n"
+            f"Literature survey used: {json.dumps(literature_survey[:4], indent=2)}\n\n"
+            "Find logical fallacies, unsupported claims, missing citations, or weak conclusions.\n"
+            "Be adversarial. List objections as bullet points.\n"
+            "Return ONLY valid JSON:\n"
+            '{"objections": ["objection 1", "objection 2"], "severity": "high|medium|low"}'
+        )
+        review_parsed = self._call_llm("agent-writer-review", "Peer Review Agent", "adversarial-review", review_prompt)
+        if not review_parsed:
+            return drafts, 0, []
+
+        objections = [str(o) for o in (review_parsed.get("objections") or [])[:5]]
+        severity = str(review_parsed.get("severity", "low"))
+
+        if len(objections) <= 1 or severity == "low":
+            return drafts, 0, objections
+
+        # Revise once incorporating the objections
+        revise_prompt = (
+            f"You are a research writer revising a paper draft based on peer review.\n\n"
+            f"Original draft:\n{json.dumps(drafts, indent=2)}\n\n"
+            f"Peer review objections:\n{json.dumps(objections, indent=2)}\n\n"
+            f"Judged direction: '{judged.get('decision_title', '')}'\n"
+            f"Rationale: '{judged.get('rationale', '')}'\n\n"
+            "Address each objection in your revision. Strengthen unsupported claims or qualify them.\n"
+            "Return ONLY valid JSON with the same keys as the original draft:\n"
+            '{"report-problem": "...", "report-related-work": "...", '
+            '"report-method": "...", "report-experiments": "...", "report-results": "..."}'
+        )
+        revised_parsed = self._call_llm("agent-writer-revise", "Writer Agent (Revision)", "report-revision", revise_prompt)
+        if revised_parsed and "report-problem" in revised_parsed:
+            revised = {
+                "report-problem": str(revised_parsed.get("report-problem", drafts["report-problem"])),
+                "report-related-work": str(revised_parsed.get("report-related-work", drafts["report-related-work"])),
+                "report-method": str(revised_parsed.get("report-method", drafts["report-method"])),
+                "report-experiments": str(revised_parsed.get("report-experiments", drafts["report-experiments"])),
+                "report-results": str(revised_parsed.get("report-results", drafts["report-results"])),
+            }
+            return revised, 1, objections
+
+        return drafts, 0, objections
+
+    def update_hypotheses_from_experiments(self, artifacts: Dict[str, object]) -> dict:
+        """Feed experiment results back into novelty hypothesis scores."""
+        hypotheses = artifacts.get("novelty_hypotheses", [])
+        experiment_results = artifacts.get("experiment_results", [])
+        if not hypotheses or not experiment_results:
+            return {}
+
+        # Average decision_alignment across completed experiments
+        alignments = [
+            e.get("metrics", {}).get("decision_alignment", 0.0)
+            for e in experiment_results
+            if isinstance(e.get("metrics"), dict)
+        ]
+        avg_alignment = sum(alignments) / len(alignments) if alignments else 0.0
+        code_executed = any(
+            e.get("metrics", {}).get("code_executed", False)
+            for e in experiment_results
+        )
+
+        updated = []
+        for i, h in enumerate(hypotheses):
+            base_score = float(h.get("score", 0.5))
+            # Boost or penalise based on experiment alignment
+            adjustment = (avg_alignment - 0.5) * 0.2
+            new_score = round(min(1.0, max(0.0, base_score + adjustment)), 3)
+            updated.append({
+                **h,
+                "score": new_score,
+                "experiment_alignment": round(avg_alignment, 3),
+                "validated_by_code": code_executed,
+            })
+        return {"novelty_hypotheses_validated": updated}
+
+    def last_llm_log_entry(self) -> Optional[dict]:
+        """Return the most recent LLM log entry (for runtime stage metadata)."""
+        return self._llm_log[-1] if self._llm_log else None
+
+    def llm_generation_log(self) -> dict:
+        """Return the per-stage LLM generation log for this toolbox instance."""
+        total = len(self._llm_log)
+        successes = sum(1 for e in self._llm_log if e["success"])
+        return {
+            "llm_generation_log": self._llm_log,
+            "llm_generation_summary": {
+                "total_calls": total,
+                "successes": successes,
+                "fallbacks": total - successes,
+                "success_rate": round(successes / total, 2) if total > 0 else 0.0,
             },
         }
 
@@ -638,8 +998,13 @@ class ResearchToolbox:
             ]
         if "judging" in normalized:
             return [
+                {"target": "agent-codegen", "category": "decision", "content": "Direction approved. Generate experiment code."},
                 {"target": "agent-executor", "category": "decision", "content": "One direction has been approved for execution."},
                 {"target": "agent-writer", "category": "decision", "content": "Draft only from the judged direction and its guardrails."},
+            ]
+        if "code" in normalized or "codegen" in normalized:
+            return [
+                {"target": "agent-executor", "category": "code", "content": "Experiment code ready for execution."},
             ]
         if "experiment" in normalized:
             return [
