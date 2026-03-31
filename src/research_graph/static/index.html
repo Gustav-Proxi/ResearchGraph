@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ResearchGraph</title>
+  <meta name="description" content="Graph-native autonomous research operating system" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -12,272 +13,280 @@
 </head>
 <body>
 
-<!-- ═══ NAV ═══ -->
-<header class="nav">
-  <div class="nav-brand">
-    <div class="nav-logo">R</div>
-    <span class="nav-name">ResearchGraph</span>
+<!-- ═══ SIDEBAR ═══ -->
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-logo">R</div>
+    <span class="sidebar-name">ResearchGraph</span>
   </div>
-  <div class="nav-center">
-    <select id="project-selector" class="nav-select"></select>
-    <button id="use-demo-button" class="btn-sm">Load Demo</button>
-    <span id="run-status-pill" class="status-pill idle"><span class="neon-dot idle"></span>idle</span>
-  </div>
-  <div class="nav-right">
-    <button id="refresh-button" class="btn-icon" title="Refresh">↺</button>
-  </div>
-</header>
 
-<!-- ═══ QUERY HERO ═══ -->
-<section id="query-section" class="query-section">
-  <div class="query-inner">
-    <div class="query-heading">
-      <div class="query-badge"><span class="neon-dot cyan"></span>Autonomous Research Suite</div>
-      <h1 class="query-title">What do you want to research?</h1>
-      <p class="query-desc">Describe your domain and problem. ResearchGraph will survey the literature, identify gaps, synthesise novel ideas, run experiments, and write a full research report — without you lifting a finger.</p>
+  <div class="sidebar-nav">
+    <button class="nav-item active" data-view="home" id="nav-home">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="nav-item" data-view="pipeline" id="nav-pipeline">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>Pipeline</span>
+    </button>
+    <button class="nav-item" data-view="graph" id="nav-graph">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><line x1="6" y1="9" x2="6" y2="15"/><path d="M6 9a9 9 0 009 9"/></svg>
+      <span>Graph</span>
+    </button>
+    <button class="nav-item" data-view="papers" id="nav-papers">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      <span>Papers</span>
+    </button>
+    <button class="nav-item" data-view="report" id="nav-report">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span>Report</span>
+    </button>
+    <button class="nav-item" data-view="settings" id="nav-settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+      <span>Settings</span>
+    </button>
+  </div>
+
+  <div class="sidebar-footer">
+    <select id="project-selector" class="project-select"></select>
+    <div id="run-status" class="status-badge idle">
+      <span class="status-dot"></span>
+      <span class="status-label">Idle</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<main id="main" class="main">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <h2 id="view-title" class="topbar-title">Home</h2>
+    <div class="topbar-actions">
+      <button id="refresh-btn" class="btn-icon" title="Refresh">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ERROR BANNER -->
+  <div id="error-banner" class="error-banner">
+    <span id="error-text">An error occurred.</span>
+    <button id="error-dismiss" class="error-close">✕</button>
+  </div>
+
+  <!-- APPROVAL BANNER -->
+  <div id="approval-banner" class="approval-banner">
+    <div class="approval-content">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>
+        <strong>Decision Ready for Review</strong>
+        <p id="approval-details">The research pipeline has reached its decision point. Review and approve or reject.</p>
+      </div>
+    </div>
+    <div class="approval-actions">
+      <button id="approve-btn" class="btn-approve">Approve & Continue</button>
+      <button id="reject-btn" class="btn-reject">Reject</button>
+    </div>
+  </div>
+
+  <!-- ═══ VIEW: HOME ═══ -->
+  <section id="view-home" class="view active">
+    <div class="hero">
+      <span class="hero-badge">Autonomous Research Suite</span>
+      <h1 class="hero-title">What do you want to research?</h1>
+      <p class="hero-desc">Describe your domain and problem. ResearchGraph will survey the literature, identify gaps, run experiments, and write a research report.</p>
     </div>
 
-    <div class="query-form">
-      <div class="query-row-2">
+    <div class="form-card">
+      <div class="form-row">
         <div class="field">
-          <label>Project Name <span class="field-opt">(optional)</span></label>
+          <label for="project-name">Project Name <span class="opt">(optional)</span></label>
           <input id="project-name" placeholder="e.g. Autonomous Research Lab" />
         </div>
         <div class="field">
-          <label>Domain</label>
-          <input id="project-domain" placeholder="e.g. autonomous research systems, drug discovery, NLP…" />
+          <label for="project-domain">Domain</label>
+          <input id="project-domain" placeholder="e.g. machine learning, drug discovery…" />
         </div>
       </div>
-      <div class="field" style="margin-top:12px;">
-        <label>Research Problem</label>
-        <textarea id="project-problem" rows="3" placeholder="Describe what you're trying to solve, discover, or understand. Be specific — what's the research question?"></textarea>
+      <div class="field">
+        <label for="project-problem">Research Problem</label>
+        <textarea id="project-problem" rows="3" placeholder="What are you trying to solve or discover?"></textarea>
       </div>
-      <div class="field" style="margin-top:10px;">
-        <label>Background <span class="field-opt">(optional)</span></label>
-        <textarea id="project-abstract" rows="2" placeholder="Paste an abstract, context, constraints, or desired outcomes…"></textarea>
+      <div class="field">
+        <label for="project-abstract">Background <span class="opt">(optional)</span></label>
+        <textarea id="project-abstract" rows="2" placeholder="Context, constraints, or desired outcomes…"></textarea>
       </div>
-      <div class="query-actions">
-        <button id="create-project-button" class="btn-ghost">Save as Project</button>
-        <button id="run-project-button" class="btn-run-hero">
-          <span id="run-btn-text">Start Research ▶</span>
+      <div class="form-options">
+        <label class="checkbox-label">
+          <input type="checkbox" id="human-approval-check" />
+          <span>Require approval before experiments</span>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button id="save-project-btn" class="btn-secondary">Save Project</button>
+        <button id="demo-btn" class="btn-secondary">Load Demo</button>
+        <button id="start-btn" class="btn-primary">
+          <span id="start-btn-text">Start Research</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         </button>
       </div>
     </div>
 
-    <!-- Error banner -->
-    <div id="error-banner">
-      <span class="neon-dot red"></span>
-      <span id="error-text">An error occurred.</span>
-      <button id="error-dismiss">✕</button>
+    <!-- Quick Stats -->
+    <div id="home-stats" class="stats-grid hidden">
+      <div class="stat-card"><div class="stat-number" id="stat-papers">0</div><div class="stat-label">Papers</div></div>
+      <div class="stat-card"><div class="stat-number" id="stat-runs">0</div><div class="stat-label">Runs</div></div>
+      <div class="stat-card"><div class="stat-number" id="stat-lessons">0</div><div class="stat-label">Lessons</div></div>
+      <div class="stat-card"><div class="stat-number" id="stat-decision">—</div><div class="stat-label">Decision</div></div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ═══ WORKSPACE (shown when a run exists) ═══ -->
-<div id="workspace" class="workspace hidden">
+  <!-- ═══ VIEW: PIPELINE ═══ -->
+  <section id="view-pipeline" class="view">
+    <div class="pipeline-container">
+      <div class="pipeline-stages" id="pipeline-stages">
+        <div class="empty-state">Start a research run to see the pipeline.</div>
+      </div>
+      <div class="pipeline-detail" id="pipeline-detail">
+        <div class="detail-card">
+          <h3>Run Summary</h3>
+          <div id="run-summary" class="detail-content"><div class="empty-state">No run data yet.</div></div>
+        </div>
+        <div class="detail-card">
+          <h3>Decision Center</h3>
+          <div id="decision-center" class="detail-content"><div class="empty-state">No decision yet.</div></div>
+        </div>
+        <div class="detail-card collapsible" data-collapsed="true">
+          <h3 class="collapsible-header">Swarm Messages <span class="collapse-icon">▸</span></h3>
+          <div id="swarm-messages" class="detail-content collapsed"><div class="empty-state">No messages.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <!-- Graph panel (left/main) -->
-  <div class="graph-panel">
-    <div class="graph-controls">
+  <!-- ═══ VIEW: GRAPH ═══ -->
+  <section id="view-graph" class="view">
+    <div class="graph-toolbar">
       <div id="graph-tabs" class="graph-tabs"></div>
       <div id="graph-legend" class="graph-legend"></div>
     </div>
-    <div class="graph-wrap">
+    <div class="graph-container">
       <div id="graph-canvas"></div>
       <div id="graph-overlay" class="graph-overlay">
-        <div class="overlay-label" id="overlay-label">Building knowledge graph…</div>
-        <div class="overlay-bar"><div class="overlay-bar-fill"></div></div>
-        <div id="overlay-stage" class="overlay-stage"></div>
+        <div class="overlay-spinner"></div>
+        <div id="overlay-label" class="overlay-text">Building graph…</div>
+        <div id="overlay-stage" class="overlay-sub"></div>
       </div>
-      <div id="node-detail">
-        <button class="nd-close" id="node-detail-close">✕</button>
+      <div id="node-detail" class="node-detail">
+        <button id="node-detail-close" class="detail-close">✕</button>
         <div id="nd-kind" class="nd-kind"></div>
         <div id="nd-title" class="nd-title"></div>
         <div id="nd-meta" class="nd-meta"></div>
         <div id="nd-props" class="nd-props"></div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- Progress sidebar (right) -->
-  <aside class="progress-sidebar">
-    <div class="card" style="margin-bottom:10px;">
-      <div class="card-head">
-        <span class="card-title"><span class="neon-dot cyan"></span>Research Progress</span>
-        <span id="current-project-pill" class="chip cyan">—</span>
-      </div>
-      <div id="stage-progress" class="stage-progress"></div>
+  <!-- ═══ VIEW: PAPERS ═══ -->
+  <section id="view-papers" class="view">
+    <div class="section-header">
+      <h3>Research Papers</h3>
+      <button id="expand-citations-btn" class="btn-secondary btn-sm">Expand Citations</button>
     </div>
-    <div class="card" style="margin-bottom:10px;">
-      <div class="card-head">
-        <span class="card-title"><span class="neon-dot amber"></span>Run Stats</span>
-      </div>
-      <div id="run-stats" class="stats-row"></div>
+    <div id="papers-list" class="card-list"><div class="empty-state">No papers yet.</div></div>
+
+    <div class="section-header" style="margin-top:24px">
+      <h3>Novelty Hypotheses</h3>
     </div>
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title"><span class="neon-dot green"></span>Project</span>
-      </div>
-      <div id="project-summary" class="item-list"></div>
-    </div>
-  </aside>
-</div>
+    <div id="novelty-list" class="card-list"><div class="empty-state">No novelty data.</div></div>
 
-<!-- ═══ RESULTS (shown when run has data) ═══ -->
-<div id="results-section" class="content-area hidden">
-
-  <div class="tab-bar">
-    <button class="tab active" data-tab="report">Report</button>
-    <button class="tab" data-tab="ideas">Ideas &amp; Novelty</button>
-    <button class="tab" data-tab="decision">Decision</button>
-    <button class="tab" data-tab="papers">Papers</button>
-    <button class="tab" data-tab="stages">Stages</button>
-    <button class="tab" data-tab="models">Models</button>
-  </div>
-
-  <!-- Report -->
-  <div id="tab-report" class="tab-content active">
-    <div class="g2-wide">
-      <div class="card span2">
-        <div class="card-head">
-          <span class="card-title"><span class="neon-dot pink"></span>Final Research Report</span>
+    <div class="detail-card collapsible" data-collapsed="true" style="margin-top:24px">
+      <h3 class="collapsible-header">Learning & Memory <span class="collapse-icon">▸</span></h3>
+      <div class="collapsed">
+        <div class="sub-section">
+          <h4>Learned Policies</h4>
+          <div id="learning-policies" class="card-list"><div class="empty-state">—</div></div>
         </div>
-        <div id="final-report" class="item-list"><div class="empty">Report will appear here after the run completes.</div></div>
-      </div>
-    </div>
-    <div class="g2-wide" style="margin-top:12px;">
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot cyan"></span>Run Summary</span></div>
-        <div id="run-summary" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot purple"></span>Timeline</span></div>
-        <div id="timeline" class="timeline-list"><div class="empty">—</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Ideas & Novelty -->
-  <div id="tab-ideas" class="tab-content">
-    <div class="g2">
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot orange"></span>Novelty Hypotheses</span></div>
-        <div id="novelty" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot green"></span>Self-Learning Policies</span></div>
-        <div id="learning-policies" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot purple"></span>Stage Guidance</span></div>
-        <div id="stage-guidance" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot blue"></span>Model Reliability</span></div>
-        <div id="model-reliability" class="item-list"><div class="empty">—</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Decision -->
-  <div id="tab-decision" class="tab-content">
-    <div class="g5">
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot cyan"></span>Proposals</span></div>
-        <div id="proposal-options" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot amber"></span>Critique</span></div>
-        <div id="critique-board" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot purple"></span>Grounding</span></div>
-        <div id="grounding-ledger" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot blue"></span>Votes</span></div>
-        <div id="vote-board" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot green"></span>Judged Decision</span></div>
-        <div id="judged-decision" class="item-list"><div class="empty">—</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Papers -->
-  <div id="tab-papers" class="tab-content">
-    <div class="g2">
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot amber"></span>Top Papers</span></div>
-        <div id="papers" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot cyan"></span>Memory Entries</span></div>
-        <div id="memory" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot pink"></span>Adaptation History</span></div>
-        <div id="adaptation-history" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot green"></span>Artifacts</span></div>
-        <div id="artifacts" class="item-list"><div class="empty">—</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Stages -->
-  <div id="tab-stages" class="tab-content">
-    <div class="g2">
-      <div class="card span2">
-        <div class="card-head"><span class="card-title"><span class="neon-dot cyan"></span>Stage Executions</span></div>
-        <div id="stages" class="item-list"><div class="empty">—</div></div>
-      </div>
-      <div class="card span2">
-        <div class="card-head"><span class="card-title"><span class="neon-dot purple"></span>Swarm Messages</span></div>
-        <div id="messages" class="item-list"><div class="empty">—</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Models -->
-  <div id="tab-models" class="tab-content">
-    <div class="g2-wide" style="margin-bottom:12px;">
-      <div class="card">
-        <div class="card-head">
-          <span class="card-title"><span class="neon-dot cyan"></span>Model Control</span>
-          <span id="ollama-pill" class="status-pill"><span class="neon-dot amber"></span>checking</span>
-        </div>
-        <div class="g2">
-          <div class="subcard">
-            <div class="subcard-title"><span class="neon-dot cyan"></span>Primary Model</div>
-            <div class="field"><label>Provider</label><select id="primary-provider"></select></div>
-            <div class="field"><label>Model</label><input id="primary-model" placeholder="gpt-4.1" /></div>
-          </div>
-          <div class="subcard">
-            <div class="subcard-title"><span class="neon-dot purple"></span>Embeddings</div>
-            <div class="field"><label>Provider</label><select id="embedding-provider"></select></div>
-            <div class="field"><label>Model</label><input id="embedding-model" placeholder="nomic-embed-text" /></div>
-          </div>
-          <div class="subcard">
-            <div class="subcard-title"><span class="neon-dot green"></span>Local Endpoints</div>
-            <div class="field"><label>Ollama URL</label><input id="ollama-url" placeholder="http://127.0.0.1:11434" /></div>
-            <div class="field"><label>LM Studio URL</label><input id="lmstudio-url" placeholder="http://127.0.0.1:1234/v1" /></div>
-            <div class="field"><label>Custom OpenAI URL</label><input id="custom-openai-url" placeholder="http://127.0.0.1:8001/v1" /></div>
-            <div class="btn-row">
-              <button id="save-model-settings" class="btn-sm cyan">Save Settings</button>
-              <button id="connect-ollama" class="btn-ghost">Connect Ollama</button>
-            </div>
-          </div>
-          <div class="subcard">
-            <div class="subcard-title"><span class="neon-dot amber"></span>Smart Routing</div>
-            <div id="routing-overview" class="item-list"><div class="empty">Single-model mode.</div></div>
-          </div>
+        <div class="sub-section">
+          <h4>Model Reliability</h4>
+          <div id="model-reliability" class="card-list"><div class="empty-state">—</div></div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot amber"></span>Custom Models</span></div>
+    </div>
+  </section>
+
+  <!-- ═══ VIEW: REPORT ═══ -->
+  <section id="view-report" class="view">
+    <div class="section-header">
+      <h3>Research Report</h3>
+      <div class="export-buttons">
+        <button id="export-md-btn" class="btn-secondary btn-sm">Export Markdown</button>
+        <button id="export-latex-btn" class="btn-secondary btn-sm">Export LaTeX</button>
+      </div>
+    </div>
+    <div id="report-content" class="report-content"><div class="empty-state">Report will appear after a run completes.</div></div>
+
+    <div class="detail-card collapsible" data-collapsed="true" style="margin-top:24px">
+      <h3 class="collapsible-header">Timeline <span class="collapse-icon">▸</span></h3>
+      <div id="timeline" class="collapsed"><div class="empty-state">No events.</div></div>
+    </div>
+  </section>
+
+  <!-- ═══ VIEW: SETTINGS ═══ -->
+  <section id="view-settings" class="view">
+    <div class="settings-grid">
+      <div class="detail-card">
+        <h3>Primary Model</h3>
+        <div class="field"><label>Provider</label><select id="primary-provider"></select></div>
+        <div class="field"><label>Model</label><input id="primary-model" placeholder="gpt-4.1" /></div>
+      </div>
+      <div class="detail-card">
+        <h3>Embeddings</h3>
+        <div class="field"><label>Provider</label><select id="embedding-provider"></select></div>
+        <div class="field"><label>Model</label><input id="embedding-model" placeholder="nomic-embed-text" /></div>
+      </div>
+      <div class="detail-card">
+        <h3>Local Endpoints</h3>
+        <div class="field"><label>Ollama URL</label><input id="ollama-url" placeholder="http://127.0.0.1:11434" /></div>
+        <div class="field"><label>LM Studio URL</label><input id="lmstudio-url" placeholder="http://127.0.0.1:1234/v1" /></div>
+        <div class="field"><label>Custom OpenAI URL</label><input id="custom-openai-url" placeholder="http://127.0.0.1:8001/v1" /></div>
+        <div class="settings-actions">
+          <button id="save-model-settings" class="btn-primary btn-sm">Save Settings</button>
+          <button id="connect-ollama" class="btn-secondary btn-sm">Connect Ollama</button>
+        </div>
+      </div>
+      <div class="detail-card">
+        <h3>Ollama Status
+          <span id="ollama-pill" class="status-badge-sm idle"><span class="status-dot-sm"></span>checking</span>
+        </h3>
+        <div id="ollama-status" class="card-list"><div class="empty-state">Checking…</div></div>
+      </div>
+    </div>
+
+    <div class="detail-card" style="margin-top:16px">
+      <h3>Available Models</h3>
+      <div class="models-grid">
+        <div>
+          <h4>Local Models</h4>
+          <div id="local-models" class="card-list"></div>
+        </div>
+        <div>
+          <h4>Embedding Models</h4>
+          <div id="embedding-presets" class="card-list"></div>
+        </div>
+      </div>
+      <div id="install-jobs" class="card-list" style="margin-top:12px"></div>
+    </div>
+
+    <div class="detail-card collapsible" data-collapsed="true" style="margin-top:16px">
+      <h3 class="collapsible-header">Providers <span class="collapse-icon">▸</span></h3>
+      <div id="providers" class="providers-grid collapsed"></div>
+    </div>
+
+    <div class="detail-card collapsible" data-collapsed="true" style="margin-top:16px">
+      <h3 class="collapsible-header">Add Custom Model <span class="collapse-icon">▸</span></h3>
+      <div class="collapsed">
         <div class="field"><label>Provider</label><select id="custom-model-provider"></select></div>
         <div class="field"><label>Name</label><input id="custom-model-name" placeholder="My local coder" /></div>
         <div class="field"><label>Model ID</label><input id="custom-model-id" placeholder="my-model:latest" /></div>
@@ -289,34 +298,19 @@
             <option value="embeddings">embeddings</option>
           </select>
         </div>
-        <div class="field"><label>Notes</label><input id="custom-model-notes" placeholder="OpenAI-compatible endpoint" /></div>
-        <button id="add-custom-model" class="btn-primary btn-full">Add Custom Model</button>
-        <div style="margin-top:12px;"><div id="custom-models" class="item-list"><div class="empty">No custom models yet.</div></div></div>
+        <div class="field"><label>Notes</label><input id="custom-model-notes" placeholder="Description" /></div>
+        <button id="add-custom-model" class="btn-primary btn-sm" style="margin-top:8px">Add Model</button>
+        <div id="custom-models" class="card-list" style="margin-top:12px"></div>
       </div>
     </div>
-    <div class="g3">
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot cyan"></span>Ollama Runtime</span></div>
-        <div id="ollama-status" class="item-list"><div class="empty">Checking…</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot green"></span>One-Click Models</span></div>
-        <div id="local-models" class="item-list"></div>
-        <div class="card-head" style="margin-top:12px;"><span class="card-title"><span class="neon-dot amber"></span>Install Jobs</span></div>
-        <div id="install-jobs" class="item-list"><div class="empty">None.</div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span class="card-title"><span class="neon-dot purple"></span>Embedding Models</span></div>
-        <div id="embedding-presets" class="item-list"></div>
-      </div>
-    </div>
-    <div class="card" style="margin-top:12px;">
-      <div class="card-head"><span class="card-title"><span class="neon-dot blue"></span>Providers</span></div>
-      <div id="providers" class="g4" style="margin-top:10px;"></div>
-    </div>
-  </div>
 
-</div><!-- /results-section -->
+    <div class="detail-card collapsible" data-collapsed="true" style="margin-top:16px">
+      <h3 class="collapsible-header">Smart Routing <span class="collapse-icon">▸</span></h3>
+      <div id="routing-overview" class="collapsed"><div class="empty-state">Single-model mode.</div></div>
+    </div>
+  </section>
+
+</main>
 
 <script src="/static/app.js" defer></script>
 </body>
