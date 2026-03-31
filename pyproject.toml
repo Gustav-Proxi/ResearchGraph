@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "research-graph"
+version = "0.1.0"
+description = "Standalone graph-native research suite for paper connectivity, agent workflows, and GraphQL exploration."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "strawberry-graphql[fastapi]>=0.262.0",
+]
+
+[project.scripts]
+research-graph-api = "research_graph.app:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/research_graph"]
