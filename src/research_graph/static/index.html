@@ -52,7 +52,12 @@
   </div>
 
   <div class="sidebar-footer">
-    <select id="project-selector" class="project-select"></select>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select id="project-selector" class="project-select" style="flex:1;min-width:0"></select>
+      <button id="delete-project-btn" class="btn-icon" title="Delete project" style="flex-shrink:0;color:#ef4444;opacity:0.7" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.7">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </button>
+    </div>
     <div id="run-status" class="status-badge idle">
       <span class="status-dot"></span>
       <span class="status-label">Idle</span>
@@ -202,6 +207,27 @@
       <h3>Research Papers</h3>
       <button id="expand-citations-btn" class="btn-secondary btn-sm">Expand Citations</button>
     </div>
+
+    <!-- Paper upload panel -->
+    <div class="detail-card" style="margin-bottom:20px">
+      <h4 style="margin:0 0 14px;color:var(--text-secondary);font-size:13px;text-transform:uppercase;letter-spacing:.06em">Add Paper</h4>
+      <div class="form-row" style="gap:10px;align-items:flex-end">
+        <div class="field" style="flex:1">
+          <label class="field-label">arXiv URL or ID</label>
+          <input id="paper-url-input" class="input" placeholder="e.g. https://arxiv.org/abs/2301.07543 or 2301.07543" />
+        </div>
+        <button id="add-paper-url-btn" class="btn-secondary" style="white-space:nowrap">Add from URL</button>
+      </div>
+      <div class="form-row" style="gap:10px;align-items:flex-end;margin-top:10px">
+        <div class="field" style="flex:1">
+          <label class="field-label">Upload PDF</label>
+          <input id="paper-file-input" type="file" accept=".pdf" class="input" style="padding:6px" />
+        </div>
+        <button id="add-paper-file-btn" class="btn-secondary" style="white-space:nowrap">Upload PDF</button>
+      </div>
+      <div id="paper-add-status" style="margin-top:8px;font-size:12px;color:var(--text-secondary);min-height:16px"></div>
+    </div>
+
     <div id="papers-list" class="card-list"><div class="empty-state">No papers yet.</div></div>
 
     <div class="section-header" style="margin-top:24px">

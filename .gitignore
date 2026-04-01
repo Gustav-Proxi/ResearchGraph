@@ -1,0 +1,23 @@
+# Secrets
+data/model_hub.json
+.env
+*.env
+secrets/
+
+# Runtime data
+data/researchgraph.db
+data/self_learning.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache/
+
+# Editor
+.DS_Store
+.idea/
+.vscode/

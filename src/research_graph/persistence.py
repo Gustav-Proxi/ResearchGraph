@@ -91,6 +91,13 @@ class ProjectStore(_Store):
             conn.close()
         return [json.loads(r[0]) for r in rows]
 
+    def delete(self, project_id: str) -> None:
+        with self._lock:
+            conn = self._connect()
+            with conn:
+                conn.execute("DELETE FROM projects WHERE id=?", (project_id,))
+            conn.close()
+
     def exists(self, project_id: str) -> bool:
         with self._lock:
             conn = self._connect()

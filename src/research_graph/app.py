@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from fastapi import BackgroundTasks, Body
+from fastapi import BackgroundTasks, Body, File, UploadFile
 from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
@@ -107,6 +107,16 @@ def create_app() -> FastAPI:
         graph = service.build_graph(demo_id, graph_kind)
         return jsonable_encoder(graph.to_dict())
 
+    @app.delete("/api/projects/{project_id}")
+    def delete_project(project_id: str) -> dict:
+        try:
+            service.delete_project(project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"deleted": project_id}
+
     @app.get("/api/projects/{project_id}")
     def get_project(project_id: str) -> dict:
         try:
@@ -132,6 +142,68 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return jsonable_encoder(paper)
+
+    @app.post("/api/projects/{project_id}/papers/arxiv")
+    def add_paper_arxiv(project_id: str, payload: Optional[dict] = Body(default=None)) -> dict:
+        """Fetch a paper from an arXiv URL or ID and add it to the project."""
+        raw = str((payload or {}).get("url", "")).strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="url is required")
+        import re as _re
+        # Accept full URL or bare ID like 2301.07543
+        m = _re.search(r"(\d{4}\.\d{4,5}(?:v\d+)?)", raw)
+        arxiv_id = m.group(1) if m else None
+        if not arxiv_id:
+            raise HTTPException(status_code=400, detail="Could not parse arXiv ID from input")
+        try:
+            from .pdf_ingestion import ingest_arxiv_pdf
+            from .arxiv_search import search_arxiv
+            # Try metadata from arXiv search first
+            results = search_arxiv(arxiv_id, limit=1)
+            base: dict = {}
+            if results:
+                p = results[0]
+                base = {"title": p.title, "abstract": p.abstract, "authors": ", ".join(p.authors),
+                        "year": p.year, "url": p.url, "venue": "arXiv"}
+            else:
+                # Minimal fallback — ingest PDF for text
+                sections = ingest_arxiv_pdf(arxiv_id, max_chars=4000)
+                abstract = " ".join(s.text[:500] for s in sections[:3]) if sections else ""
+                base = {"title": f"arXiv:{arxiv_id}", "abstract": abstract,
+                        "url": f"https://arxiv.org/abs/{arxiv_id}", "year": 2024}
+            paper = service.add_paper(project_id, base)
+            return jsonable_encoder(paper)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/papers/upload")
+    async def upload_paper_pdf(project_id: str, file: UploadFile = File(...)) -> dict:
+        """Upload a PDF file, extract text, and add as a paper."""
+        if not file.filename or not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+        try:
+            pdf_bytes = await file.read()
+            from .pdf_ingestion import _extract_text, _segment
+            text = _extract_text(pdf_bytes)
+            if not text:
+                raise HTTPException(status_code=422, detail="Could not extract text from PDF")
+            sections = _segment(text[:20000])
+            abstract = " ".join(s.text[:600] for s in sections[:4] if s.title.lower() not in ("references",))
+            # Use filename (minus .pdf) as title fallback
+            import re as _re
+            title_guess = _re.sub(r"[-_]", " ", file.filename[:-4]).strip() or "Uploaded Paper"
+            paper_data = {
+                "title": title_guess,
+                "abstract": abstract[:2000],
+                "url": "",
+                "year": 2024,
+            }
+            paper = service.add_paper(project_id, paper_data)
+            return jsonable_encoder(paper)
+        except HTTPException:
+            raise
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/projects/{project_id}/top-papers")
     def top_papers(project_id: str, limit: int = 5) -> dict:

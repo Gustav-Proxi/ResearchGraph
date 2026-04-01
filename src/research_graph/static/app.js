@@ -101,7 +101,7 @@ function switchView(view) {
   $("view-title").textContent = titles[view] || view;
 
   // Defer graph load one frame so the view is painted and has real dimensions
-  if (view === "graph") requestAnimationFrame(() => loadAndDrawGraph());
+  if (view === "graph") requestAnimationFrame(() => requestAnimationFrame(() => loadAndDrawGraph()));
 }
 
 /* ═══════════════════════════════════════════
@@ -126,6 +126,7 @@ $("demo-btn").addEventListener("click", loadDemo);
 $("refresh-btn").addEventListener("click", () => boot());
 $("error-dismiss").addEventListener("click", clearError);
 $("project-selector").addEventListener("change", e => switchProject(e.target.value));
+$("delete-project-btn").addEventListener("click", deleteCurrentProject);
 $("node-detail-close").addEventListener("click", () => $("node-detail").classList.remove("open"));
 $("save-model-settings").addEventListener("click", saveModelSettings);
 $("connect-ollama").addEventListener("click", connectOllama);
@@ -133,6 +134,8 @@ $("add-custom-model").addEventListener("click", addCustomModel);
 $("export-md-btn").addEventListener("click", () => exportReport("md"));
 $("export-latex-btn").addEventListener("click", () => exportReport("latex"));
 $("expand-citations-btn").addEventListener("click", expandCitations);
+$("add-paper-url-btn").addEventListener("click", addPaperFromUrl);
+$("add-paper-file-btn").addEventListener("click", addPaperFromFile);
 $("clear-runs-btn").addEventListener("click", clearRunHistory);
 $("approve-btn").addEventListener("click", () => approveRun(true));
 $("reject-btn").addEventListener("click", () => approveRun(false));
@@ -143,8 +146,7 @@ boot();
    BOOT
 ═══════════════════════════════════════════ */
 async function boot() {
-  await loadProjects();
-  await loadModelHub();
+  await Promise.all([loadProjects(), loadModelHub()]);
   renderGraphTabs();
   await loadWorkspace();
 }
@@ -166,14 +168,17 @@ async function loadProjects(preferredId) {
 async function loadWorkspace() {
   if (!state.projectId) return;
   try {
-    state.project = await fetchJson(`/api/projects/${state.projectId}`);
-    state.learning = await fetchJson(`/api/projects/${state.projectId}/learning`);
-    const runs = await fetchJson(`/api/projects/${state.projectId}/runs`);
-    state.run = runs.items[0] || null;
-    const [papersP, noveltyP] = await Promise.all([
-      fetchJson(`/api/projects/${state.projectId}/top-papers?limit=10`),
-      fetchJson(`/api/projects/${state.projectId}/novelty`),
+    const id = state.projectId;
+    const [project, learning, runs, papersP, noveltyP] = await Promise.all([
+      fetchJson(`/api/projects/${id}`),
+      fetchJson(`/api/projects/${id}/learning`),
+      fetchJson(`/api/projects/${id}/runs`),
+      fetchJson(`/api/projects/${id}/top-papers?limit=10`),
+      fetchJson(`/api/projects/${id}/novelty`),
     ]);
+    state.project = project;
+    state.learning = learning;
+    state.run = runs.items[0] || null;
     renderHomeStats();
     renderPapers(papersP.items || []);
     renderNovelty(noveltyP.items || []);
@@ -226,6 +231,7 @@ async function startResearch() {
       body: JSON.stringify({ objective: problem, human_approval: humanApproval }),
     });
     state.run = run;
+    _resetGraph();  // clear old run's graph so new one builds fresh
     setStatus("running");
     $("start-btn-text").textContent = "Running…";
     switchView("pipeline");
@@ -270,10 +276,26 @@ async function loadDemo() {
   await loadWorkspace();
 }
 
+async function deleteCurrentProject() {
+  const id = state.projectId;
+  if (!id || id === "demo-project") { showError("Cannot delete the demo project."); return; }
+  const name = state.projects.find(p => p.id === id)?.name || id;
+  if (!confirm(`Delete "${name}" and all its runs? This cannot be undone.`)) return;
+  try {
+    await fetchJson(`/api/projects/${id}`, { method: "DELETE" });
+    await loadProjects();
+    _resetGraph();
+    await loadWorkspace();
+  } catch(e) {
+    showError(e.message);
+  }
+}
+
 async function switchProject(id) {
   state.projectId = id;
   localStorage.setItem(STORAGE_KEY, id);
   stopSSE();
+  _resetGraph();
   await loadWorkspace();
 }
 
@@ -450,6 +472,61 @@ async function expandCitations() {
   }
 }
 
+function _paperStatus(msg, isError) {
+  const el = $("paper-add-status");
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? "var(--error)" : "var(--accent)";
+}
+
+async function addPaperFromUrl() {
+  if (!state.projectId) return;
+  const raw = ($("paper-url-input").value || "").trim();
+  if (!raw) { _paperStatus("Paste an arXiv URL or ID first.", true); return; }
+  const btn = $("add-paper-url-btn");
+  btn.disabled = true;
+  _paperStatus("Fetching…");
+  try {
+    await fetchJson(`/api/projects/${state.projectId}/papers/arxiv`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: raw }),
+    });
+    _paperStatus("Paper added.");
+    $("paper-url-input").value = "";
+    const papersP = await fetchJson(`/api/projects/${state.projectId}/top-papers?limit=10`);
+    renderPapers(papersP.items || []);
+  } catch(e) {
+    _paperStatus(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function addPaperFromFile() {
+  if (!state.projectId) return;
+  const fileInput = $("paper-file-input");
+  const file = fileInput.files?.[0];
+  if (!file) { _paperStatus("Select a PDF file first.", true); return; }
+  const btn = $("add-paper-file-btn");
+  btn.disabled = true;
+  _paperStatus("Uploading…");
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`/api/projects/${state.projectId}/papers/upload`, { method: "POST", body: form });
+    if (!res.ok) { const t = await res.text().catch(() => res.statusText); throw new Error(`${res.status}: ${t}`); }
+    _paperStatus("PDF uploaded and processed.");
+    fileInput.value = "";
+    const papersP = await fetchJson(`/api/projects/${state.projectId}/top-papers?limit=10`);
+    renderPapers(papersP.items || []);
+  } catch(e) {
+    _paperStatus(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 /* ═══════════════════════════════════════════
    GRAPH
 ═══════════════════════════════════════════ */
@@ -504,7 +581,9 @@ async function loadAndDrawGraph() {
   try {
     const graph = await fetchJson(url);
     drawGraph(graph);
-  } catch (_) {}
+  } catch (err) {
+    console.error("[graph] loadAndDrawGraph failed:", err);
+  }
 }
 
 function _nodeSize(node) {
@@ -550,18 +629,30 @@ function _drawNode(node, ctx, gs) {
   ctx.shadowBlur = 0;
 }
 
-function _initGraph() {
+function _dbg(msg) {
+  console.log("[graph]", msg);
   const el = $("graph-canvas");
   if (!el) return;
+  let d = el.querySelector(".graph-debug");
+  if (!d) { d = document.createElement("div"); d.className = "graph-debug"; d.style.cssText = "position:absolute;top:8px;left:8px;background:rgba(0,0,0,.7);color:#0f0;font:11px monospace;padding:6px 10px;border-radius:4px;z-index:99;pointer-events:none"; el.appendChild(d); }
+  d.textContent = msg;
+}
+
+function _initGraph() {
+  const el = $("graph-canvas");
+  if (!el) { console.error("[graph] no #graph-canvas element"); return; }
   el.innerHTML = "";
   _graphAutoFit = false; _hoveredNode = null;
-  // Use offsetWidth — more reliable than clientWidth when view just became visible
-  const W = el.offsetWidth  || el.parentElement?.offsetWidth  || 900;
-  const H = el.offsetHeight || el.parentElement?.offsetHeight || 560;
+  const rect = el.getBoundingClientRect();
+  const pRect = el.parentElement?.getBoundingClientRect();
+  const W = rect.width  > 10 ? rect.width  : (pRect?.width  || window.innerWidth  - 240);
+  const H = rect.height > 10 ? rect.height : (pRect?.height || window.innerHeight - 220);
+  _dbg(`init ${Math.round(W)}×${Math.round(H)} | ForceGraph=${typeof ForceGraph}`);
+  if (typeof ForceGraph === "undefined") { _dbg("ERROR: ForceGraph library not loaded"); return; }
 
   _graph = ForceGraph()(el)
     .width(W).height(H)
-    .backgroundColor("#00000000")
+    .backgroundColor("#05080f")
     .nodeCanvasObject(_drawNode)
     .nodeCanvasObjectMode(() => "replace")
     .nodePointerAreaPaint((node, color, ctx) => {
@@ -590,21 +681,13 @@ function _initGraph() {
   _graph.d3Force("charge").strength(-220);
   _graph.d3Force("link").distance(70);
   _graphNodeIds = new Set();
-
-  // Resize to true container dimensions after browser completes layout
-  requestAnimationFrame(() => {
-    if (!_graph) return;
-    const rW = el.offsetWidth;
-    const rH = el.offsetHeight;
-    if (rW > 0 && rH > 0 && (rW !== W || rH !== H)) {
-      _graph.width(rW).height(rH);
-    }
-  });
 }
 
 function drawGraph(graph) {
-  if (!graph?.nodes?.length) return;
+  if (!graph?.nodes?.length) { _dbg("ERROR: empty graph data"); return; }
+  _dbg(`drawGraph: ${graph.nodes.length} nodes, ${(graph.edges||[]).length} edges`);
   if (!_graph) _initGraph();
+  if (!_graph) { _dbg("ERROR: _initGraph failed"); return; }
 
   const deg = {};
   (graph.edges||[]).forEach(e => { deg[e.source]=(deg[e.source]||0)+1; deg[e.target]=(deg[e.target]||0)+1; });

@@ -130,22 +130,8 @@ class ResearchToolbox:
             new_papers = [p for p in live_papers if p.title.lower() not in existing_titles]
             project.papers = project.papers + new_papers
 
-        # Optionally enrich top arXiv papers with full text via PDF ingestion
-        pdf_ingested = 0
-        try:
-            from .pdf_ingestion import ingest_pdf
-            for paper in project.papers[:3]:
-                if paper.url and "arxiv.org" in paper.url and len(paper.abstract) < 500:
-                    pdf_url = paper.url.replace("/abs/", "/pdf/")
-                    sections = ingest_pdf(pdf_url, max_chars=8000)
-                    if sections:
-                        combined = " ".join(s.text[:600] for s in sections[:3])
-                        paper.abstract = (paper.abstract + " " + combined).strip()[:2000]
-                        pdf_ingested += 1
-        except Exception:
-            pass
-
         ranked = self._turboquant.rank_papers(project, limit=min(8, len(project.papers)))
+        pdf_ingested = 0
         themes = Counter(keyword for paper in project.papers for keyword in paper.keywords)
         return {
             "paper_graph": {

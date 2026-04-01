@@ -239,6 +239,19 @@ class ResearchGraphService:
         self._save_project(project)
         return project
 
+    def delete_project(self, project_id: str) -> None:
+        if project_id == "demo-project":
+            raise ValueError("Cannot delete the demo project.")
+        if project_id not in self._projects:
+            raise KeyError(f"Project {project_id!r} not found.")
+        self._projects.pop(project_id, None)
+        self._project_store.delete(project_id)
+        # Also purge associated runs from memory
+        orphaned = [rid for rid, r in self._runs.items() if r.project_id == project_id]
+        for rid in orphaned:
+            self._runs.pop(rid, None)
+            self._run_projects.pop(rid, None)
+
     def add_paper(self, project_id: str, paper_data: dict) -> dict:
         """Add a user-supplied paper to the project's corpus."""
         from .models import Paper

@@ -312,13 +312,22 @@ def _default_agents() -> List[AgentStage]:
             depends_on=["agent-coordinator", "agent-grounding", "agent-critic"],
         ),
         AgentStage(
+            id="agent-codegen",
+            name="Code Generation Agent",
+            role="code-generation",
+            description="Generates a self-contained Python experiment script for the judged research direction.",
+            inputs=["judged_decision", "literature_survey", "gap_analysis"],
+            outputs=["codegen_result"],
+            depends_on=["agent-judge"],
+        ),
+        AgentStage(
             id="agent-executor",
             name="Experiment Operator Agent",
             role="experiment-execution",
             description="Implements experiments for the judged direction, runs evaluations, and collects results with traceability.",
-            inputs=["judged_decision", "implementation_plan"],
+            inputs=["judged_decision", "implementation_plan", "codegen_result"],
             outputs=["experiment_results"],
-            depends_on=["agent-judge"],
+            depends_on=["agent-codegen"],
         ),
         AgentStage(
             id="agent-memory",
@@ -327,7 +336,7 @@ def _default_agents() -> List[AgentStage]:
             description="Maintains a temporal memory graph of papers, experiments, decisions, failures, and reusable insights.",
             inputs=["paper_graph", "experiment_results", "judged_decision"],
             outputs=["memory_graph", "evidence_context"],
-            depends_on=["agent-evidence", "agent-executor", "agent-judge"],
+            depends_on=["agent-evidence", "agent-executor", "agent-codegen"],
         ),
         AgentStage(
             id="agent-writer",
