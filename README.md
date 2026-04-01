@@ -1,247 +1,135 @@
 # ResearchGraph
 
-`ResearchGraph` is a new standalone project for the system you described: an end-to-end research suite that treats papers, agents, experiments, reports, artifacts, and technologies as connected graphs instead of isolated steps.
+An end-to-end autonomous research operating system. Submit a domain and research problem — ResearchGraph surveys the literature, identifies gaps, synthesises novel ideas, runs experiments, and writes a full research report without further input.
 
-This is intentionally a separate project from `Arc`, `AgentScope`, `vectorlens`, or `RAG`, even though it is designed to reuse ideas from them later.
+## What it does
 
-## What exists now
-
-- A standalone Python package under `src/research_graph`.
-- Graph-native domain models for:
-  - papers
-  - agents
-  - experiments
-  - report sections
-  - artifacts
-  - technologies
-- A runnable runtime/orchestrator with:
-  - executable agent stages
-  - swarm-style agent messaging
-  - tool wiring
-  - run memory
-  - cross-run self-learning and reflection
-  - optional AgentScope tracing
-- A model hub with:
-  - major provider registry plus custom provider slots
-  - primary-model and embedding-model settings
-  - Ollama connectivity checks
-  - one-click local small-model installs
-  - visible install job status in the dashboard
-- Graph builders for:
-  - paper connectivity graph
-  - agent workflow graph
-  - experiment graph
-  - report graph
-  - technology graph
-  - agentic taxonomy graph
-  - unified research graph
-- `TurboQuant`, a scoring engine for ranking papers and graph nodes by overlap, recency, citations, and connectivity.
-- Novelty hypotheses that make the system more than a document lookup wrapper.
-- FastAPI endpoints.
-- GraphQL schema for exploring the project and graph data.
-- A frontend dashboard served directly from the backend.
-- Seed data for a demo research program centered on autonomous research systems.
-
-## Why a separate project
-
-This project is the integration layer:
-
-- `AgentScope` can become the run-trace layer.
-- `vectorlens` concepts can become evidence-grounding and attribution modules.
-- your `RAG` repo can contribute evidence ingestion, workspace corpora, and confidence checks as one subsystem only.
-- `Arc` can remain an experimentation sandbox instead of carrying the entire product.
-
-## Project layout
-
-- `src/research_graph/models.py`: graph-native domain objects.
-- `src/research_graph/seed.py`: demo project seeding and default pipeline.
-- `src/research_graph/graphs.py`: graph builders for papers, agents, experiments, reports, technology, and unified views.
-- `src/research_graph/runtime.py`: executable runtime and swarm orchestration.
-- `src/research_graph/tools.py`: stage toolchain and artifact-producing tools.
-- `src/research_graph/tracing.py`: optional AgentScope bridge.
-- `src/research_graph/runtime_models.py`: run, stage, message, timeline, and memory models.
-- `src/research_graph/turboquant.py`: ranking/scoring engine.
-- `src/research_graph/model_hub.py`: model/provider catalog, settings persistence, Ollama integration, and local install jobs.
-- `src/research_graph/learning.py`: persisted self-learning engine, lesson extraction, and run-to-run adaptation state.
-- `src/research_graph/service.py`: in-memory repository and orchestration service.
-- `src/research_graph/schema.py`: GraphQL schema.
-- `src/research_graph/app.py`: FastAPI application and REST endpoints.
-- `docs/agentic_blueprint.md`: paper-grounded rationale for the agentic taxonomy and novelty direction.
-- `src/research_graph/static/`: frontend dashboard assets.
+1. **Literature survey** — searches Semantic Scholar + arXiv, ranks papers by semantic similarity via embeddings
+2. **Gap analysis** — LLM-driven identification of open problems in the field
+3. **Proposal generation** — multiple research directions with feasibility and novelty scores
+4. **Critique & grounding** — adversarial agent challenges each proposal against evidence
+5. **Novelty hypotheses** — concrete novel architectures or methods grounded in papers
+6. **Experiment design & execution** — auto-generates and runs experiment stubs
+7. **Research report** — full paper draft (problem, related work, methodology, results, conclusions)
+8. **Self-learning** — lessons from each run are persisted and fed back into future runs
 
 ## Quick start
 
 ```bash
 cd ResearchGraph
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 research-graph-api
+# → http://127.0.0.1:8080
 ```
 
-Then open:
-
-- `http://127.0.0.1:8080/`
-- `http://127.0.0.1:8080/docs`
-- `http://127.0.0.1:8080/graphql`
-
-## REST endpoints
-
-- `GET /health`
-- `GET /api/projects`
-- `GET /api/projects/demo`
-- `GET /api/projects/{project_id}`
-- `GET /api/projects/{project_id}/graphs/{graph_kind}`
-- `GET /api/projects/{project_id}/top-papers?limit=5`
-- `GET /api/projects/{project_id}/runs`
-- `POST /api/projects/{project_id}/runs`
-- `GET /api/projects/{project_id}/novelty`
-- `GET /api/projects/{project_id}/learning`
-- `GET /api/runs/{run_id}`
-- `GET /api/runs/{run_id}/graphs/{graph_kind}`
-- `GET /api/models`
-- `GET /api/models/settings`
-- `POST /api/models/settings`
-- `POST /api/models/custom`
-- `GET /api/models/ollama`
-- `POST /api/models/ollama/connect`
-- `POST /api/models/ollama/install`
-- `GET /api/models/install-jobs`
-
-Supported graph kinds:
-
-- `papers`
-- `agents`
-- `experiments`
-- `reports`
-- `learning`
-- `technology`
-- `agentic`
-- `unified`
-
-## Example GraphQL queries
-
-```graphql
-query DemoProject {
-  demoProject {
-    id
-    name
-    domain
-    problem
-    topPapers(limit: 3) {
-      id
-      title
-      score
-    }
-  }
-}
+Set your OpenRouter key for real LLM calls:
+```bash
+export OPENROUTER_API_KEY=sk-or-...
 ```
 
-```graphql
-mutation ExecuteDemo {
-  executeProject(projectId: "demo-project", objective: "Run the full research suite") {
-    id
-    status
-    summary
-  }
-}
+Optionally add a Semantic Scholar key for higher rate limits:
+```bash
+export SEMANTIC_SCHOLAR_API_KEY=...
 ```
 
-```graphql
-query UnifiedGraph {
-  unifiedGraph(projectId: "demo-project") {
-    kind
-    nodes {
-      id
-      label
-      kind
-    }
-    edges {
-      source
-      target
-      kind
-      weight
-    }
-  }
-}
+## Architecture
+
+| Layer | What it does |
+|-------|-------------|
+| **Frontend** | Vanilla JS, sidebar navigation, live 2D force graph (ring nodes, curved arrows), pipeline progress |
+| **FastAPI backend** | `POST /api/projects/{id}/runs` starts background run, frontend polls `GET /api/runs/{id}` every 1.8s |
+| **AgentRuntime** | Topological stage execution over a dependency graph of 13+ specialist agents |
+| **ResearchToolbox** | Per-stage LLM calls via OpenRouter; falls back gracefully if key missing |
+| **EmbeddingClient** | Ollama-first, falls back to OpenRouter `text-embedding-3-small` |
+| **TurboQuant** | Semantic similarity ranking of papers using cosine distance on embeddings |
+| **SelfLearningEngine** | Persists lessons, model profiles, and policies across runs in `data/self_learning.json` |
+| **ModelHub** | Provider registry, Ollama integration, one-click local model installs |
+
+## Pipeline stages
+
+```
+Intake → Evidence Scout → Planning Graph → Survey →
+Planner → Critic → Grounding → Novelty → Coordinator →
+Judge → Executor → Memory → Writer
 ```
 
-## Reuse plan
+Each stage writes artifacts to the run object, which the live graph endpoint reads incrementally.
 
-This codebase is clean and independent, but it is set up to absorb parts of your other work:
+## Graph views
 
-- from your `RAG` repo: evidence ingestion, corpus management, and confidence estimation
-- from `vectorlens`: groundedness and evidence attribution
-- from `agentreplay` or `AgentScope`: agent execution tracing and replay
+The Knowledge Graph view shows 8 different projections of the same research run:
 
-## Runtime
+| Kind | What it shows |
+|------|--------------|
+| `unified` | All nodes and relationships together |
+| `papers` | Citation and evidence network |
+| `agents` | Pipeline agent flow |
+| `experiments` | Experiment design and results |
+| `reports` | Report section structure |
+| `learning` | Cross-run lessons and model reliability |
+| `technology` | Methods, tools, and technology landscape |
+| `agentic` | Taxonomy of agentic capabilities |
 
-The system is now executable, not just structural.
+Graphs build live during a run — nodes animate in as each stage completes.
 
-It currently includes:
+## Key files
 
-- topological orchestration over the agent dependency graph
-- executable stage handlers for intake, evidence discovery, planning, survey, experiments, memory, coordination, novelty, and writing
-- swarm-style messages passed between specialist agents
-- run memory populated during execution
-- learned policies persisted across runs and fed back into later stages
-- optional AgentScope tracing when a compatible backend is available
+| File | Purpose |
+|------|---------|
+| `src/research_graph/app.py` | FastAPI routes |
+| `src/research_graph/service.py` | Orchestration service, run lifecycle |
+| `src/research_graph/runtime.py` | AgentRuntime — topological stage execution |
+| `src/research_graph/tools.py` | Stage artifact generators with LLM calls |
+| `src/research_graph/graphs.py` | 8 graph builders + live incremental graph |
+| `src/research_graph/paper_search.py` | Semantic Scholar + arXiv search with caching |
+| `src/research_graph/arxiv_search.py` | arXiv Atom feed search (no key required) |
+| `src/research_graph/embeddings.py` | Embedding client (Ollama → OpenRouter fallback) |
+| `src/research_graph/llm_router.py` | LLM routing across providers |
+| `src/research_graph/model_hub.py` | Provider registry, Ollama, local model installs |
+| `src/research_graph/learning.py` | Self-learning engine, cross-run reflection |
+| `src/research_graph/turboquant.py` | Semantic paper ranking |
+| `src/research_graph/seed.py` | Demo project and pipeline definition |
+| `src/research_graph/static/` | Frontend (index.html, app.js, styles.css) |
 
-## Model Dashboard
+## REST API
 
-The frontend now exposes:
+```
+GET  /health
+GET  /api/projects
+POST /api/projects
+GET  /api/projects/{id}
+GET  /api/projects/{id}/graphs/{kind}
+POST /api/projects/{id}/runs
+GET  /api/projects/{id}/runs
+GET  /api/runs/{id}
+GET  /api/runs/{id}/graphs/{kind}
+GET  /api/runs/{id}/stream          SSE live updates
+GET  /api/runs/{id}/export?format=md|latex
+POST /api/runs/{id}/approve         human-in-the-loop approval
+DELETE /api/runs                    clear run history
+GET  /api/models/settings
+POST /api/models/settings
+GET  /api/models/ollama
+POST /api/models/ollama/connect
+POST /api/models/ollama/install
+GET  /api/models/install-jobs
+POST /api/models/custom
+```
 
-- major model providers plus local/self-hosted endpoints
-- separate primary-model and embedding-model controls
-- Ollama status and installed-model visibility
-- one-click download buttons for curated small local chat models and embedding models
-- custom model registration for any provider or OpenAI-compatible endpoint
-- visible self-learning panels for learned policies, stage guidance, model reliability, and adaptation history
+## Model support
 
-If AgentScope is importable but no backend is running, tracing fails open and the run still completes locally.
+- **OpenRouter** — any model via `openrouter` provider (default: `openai/gpt-4.1`)
+- **Ollama** — local models, auto-detected at `http://127.0.0.1:11434`
+- **LM Studio** — OpenAI-compatible endpoint at `http://127.0.0.1:1234/v1`
+- **Custom** — any OpenAI-compatible endpoint
 
-## Agentic architecture
+Configure in Settings tab or via `data/model_hub.json`.
 
-The current design is explicitly influenced by the taxonomy from the 2025 survey “Graphs Meet AI Agents: Taxonomy, Progress, and Future Opportunities”:
+## Development notes
 
-- planning
-- execution
-- memory
-- multi-agent coordination
-
-It also adopts the paper’s future-looking directions:
-
-- graph foundation models
-- MCP-style structured context exchange
-- open agent networks
-
-ResearchGraph turns those into concrete system objects:
-
-- taxonomy facets
-- agent stages
-- protocol/network technologies
-- experiments
-- report sections
-- novelty hypotheses
-- an `agentic` graph that binds them together
-
-## What makes this different
-
-This project is intentionally not just “RAG with a graph UI”.
-
-The novel direction here is a graph-native research operating system:
-
-- `Reflexive Graph Memory`: failures, weak evidence chains, and reusable reasoning motifs are stored as first-class memory graph edges.
-- `Self-Learning Swarm`: each run reflects on model reliability, routing outcomes, and grounded reporting, then pushes those lessons back into later runs.
-- `Topology-Adaptive Agent Router`: agent communication is optimized as a graph problem, not hardcoded as a fixed chain.
-- `MCP-Native Context Graph`: literature, tools, data sources, and artifacts live in one structured context plane.
-- `Experiment Graph`: baselines, ablations, metrics, and run lineage are first-class graph objects instead of spreadsheet afterthoughts.
-- `Report Graph`: writing is grounded section by section against evidence, plans, experiments, and novelty claims.
-
-## Next steps
-
-1. Add real scholarly ingestion and citation expansion.
-2. Swap the in-memory store for SQLite or Postgres.
-3. Add GraphQL mutations for project ingestion, experiment creation, and report assembly.
-4. Connect run-time tracing to `AgentScope`.
-5. Add real literature-grounded novelty detection beyond heuristic scoring.
+- State is in-memory only — restarts lose runs (by design for now)
+- Self-learning state persists to `data/self_learning.json`
+- Paper search results are cached in-process per query to avoid rate limits
+- Each pipeline run makes ~13 LLM calls (one per stage); typical duration 2–4 min on OpenRouter
+- The frontend polls `/api/runs/{id}` every 1.8s during active runs
