@@ -300,7 +300,7 @@ class ResearchGraphService:
 
     # ── run methods ───────────────────────────────────────────────────────────
 
-    def create_run_placeholder(self, project_id: str, objective: str = "") -> RuntimeRun:
+    def create_run_placeholder(self, project_id: str, objective: str = "", human_approval: bool = False) -> RuntimeRun:
         project = self.get_project(project_id)
         run = RuntimeRun(
             id="run-" + __import__("uuid").uuid4().hex[:12],
@@ -309,6 +309,7 @@ class ResearchGraphService:
             status="queued",
             objective=objective or project.problem,
         )
+        run.artifacts["_human_approval"] = human_approval
         self._runs[run.id] = run
         self._run_store.save(run.to_dict())
         return run
@@ -317,6 +318,7 @@ class ResearchGraphService:
         run = self._runs.get(run_id)
         if run is None:
             return
+        human_approval = run.artifacts.pop("_human_approval", False)
         try:
             project = self.get_project(run.project_id)
             learning_context = self._learning.runtime_context(run.project_id)
@@ -326,6 +328,14 @@ class ResearchGraphService:
                 learning_context=learning_context,
                 run_ref=run,
             )
+
+            # Human-in-the-loop: pause after judge if enabled
+            if human_approval and run.artifacts.get("judged_decision", {}).get("status") == "approved":
+                run.status = "awaiting_approval"
+                self._run_store.save(run.to_dict())
+                self._run_projects[run_id] = snapshot
+                return  # Stop here until user approves
+
             learning_state = self._learning.learn(run.project_id, run)
             run.learning_state = learning_state
             run.reflection = learning_state.get("latest_reflection", {})
@@ -354,7 +364,29 @@ class ResearchGraphService:
         if run.status == "completed":
             return
         run.status = "running"
-        self.execute_run_background(run_id)
+        # Complete the learning phase that was skipped during approval pause
+        try:
+            project = self.get_project(run.project_id)
+            learning_state = self._learning.learn(run.project_id, run)
+            run.learning_state = learning_state
+            run.reflection = learning_state.get("latest_reflection", {})
+            run.artifacts["self_learning_state"] = {
+                "run_count": learning_state["run_count"],
+                "top_lessons": [item["title"] for item in learning_state["lessons"][:5]],
+                "top_model_profiles": learning_state["model_profiles"][:3],
+            }
+            run.artifacts["self_learning_reflection"] = run.reflection
+            run.summary["artifacts"] = sorted(run.artifacts.keys())
+            run.summary["learned_policies"] = len(learning_state["lessons"])
+            run.summary["learning_runs"] = learning_state["run_count"]
+            run.status = "completed"
+            run.finished_at = utc_now()
+            self._run_store.save(run.to_dict())
+        except Exception as exc:
+            run.status = "error"
+            run.finished_at = utc_now()
+            run.summary = {"error": str(exc)}
+            self._run_store.save(run.to_dict())
 
     def run_project(self, project_id: str, *, objective: str = "") -> RuntimeRun:
         project = self.get_project(project_id)
@@ -377,6 +409,17 @@ class ResearchGraphService:
         self._run_store.save(run.to_dict())
         return run
 
+    def clear_runs(self, project_id: Optional[str] = None) -> int:
+        """Delete all runs (optionally scoped to a project). Returns count deleted."""
+        if project_id:
+            to_delete = [rid for rid, r in self._runs.items() if r.project_id == project_id]
+        else:
+            to_delete = list(self._runs.keys())
+        for rid in to_delete:
+            self._runs.pop(rid, None)
+            self._run_projects.pop(rid, None)
+        return len(to_delete)
+
     def list_runs(self, project_id: Optional[str] = None) -> List[RuntimeRun]:
         runs = list(self._runs.values())
         if project_id:
@@ -398,6 +441,14 @@ class ResearchGraphService:
         self.get_project(project_id)
         return self._learning.get_project_state(project_id)
 
+    def global_learning_state(self) -> Dict[str, object]:
+        """Aggregate learning state across all projects."""
+        return self._learning.global_state()
+
+    def transfer_lessons(self, source_project_id: str, target_project_id: str) -> int:
+        """Transfer lessons between projects."""
+        return self._learning.transfer_lessons(source_project_id, target_project_id)
+
     def model_settings(self) -> Dict[str, object]:
         return self._model_hub.settings()
 
@@ -418,6 +469,31 @@ class ResearchGraphService:
 
     def install_jobs(self) -> List[Dict[str, object]]:
         return self._model_hub.list_install_jobs()
+
+    # ── citation expansion ────────────────────────────────────────────────────
+
+    def expand_citations_background(self, project_id: str, depth: int = 1) -> None:
+        """Expand the paper corpus by crawling citations of top papers."""
+        try:
+            project = self.get_project(project_id)
+        except KeyError:
+            return
+
+        from .citation_graph import expand_citations
+        existing_titles = {p.title.lower() for p in project.papers}
+        top_papers = sorted(project.papers, key=lambda p: p.citations, reverse=True)[:3]
+
+        for paper in top_papers:
+            try:
+                new_papers = expand_citations(paper, depth=depth, max_refs=8, max_cites=8)
+                for np in new_papers:
+                    if np.title.lower() not in existing_titles:
+                        project.papers.append(np)
+                        existing_titles.add(np.title.lower())
+            except Exception:
+                continue
+
+        self._save_project(project)
 
     # ── graphs ────────────────────────────────────────────────────────────────
 
@@ -444,11 +520,15 @@ class ResearchGraphService:
         raise KeyError("Unsupported graph kind: %s" % graph_kind)
 
     def build_run_graph(self, run_id: str, graph_kind: str) -> GraphData:
-        try:
-            project = self._run_projects[run_id]
-            run = self._runs[run_id]
-        except KeyError as exc:
-            raise KeyError("Unknown run_id: %s" % run_id) from exc
+        run = self._runs.get(run_id)
+        if run is None:
+            raise KeyError("Unknown run_id: %s" % run_id)
+        # Use snapshot if available; otherwise fall back to live project
+        project = self._run_projects.get(run_id)
+        if project is None:
+            project = self._projects.get(run.project_id)
+        if project is None:
+            raise KeyError("Unknown project for run_id: %s" % run_id)
         if graph_kind == "papers":
             return build_paper_graph(project)
         if graph_kind == "agents":
@@ -485,3 +565,4 @@ class ResearchGraphService:
                 except Exception:
                     demo = build_demo_project()
                     self._projects[demo.id] = demo
+

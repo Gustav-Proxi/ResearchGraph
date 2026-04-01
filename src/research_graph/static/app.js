@@ -97,10 +97,11 @@ function switchView(view) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   $(`view-${view}`)?.classList.add("active");
 
-  const titles = { home:"Home", pipeline:"Pipeline", graph:"Knowledge Graph", papers:"Papers & Memory", report:"Research Report", settings:"Settings" };
+  const titles = { home:"Home", pipeline:"Pipeline", graph:"Knowledge Graph", papers:"Papers & Memory", experiments:"Experiments", report:"Research Report", settings:"Settings" };
   $("view-title").textContent = titles[view] || view;
 
-  if (view === "graph") loadAndDrawGraph();
+  // Defer graph load one frame so the view is painted and has real dimensions
+  if (view === "graph") requestAnimationFrame(() => loadAndDrawGraph());
 }
 
 /* ═══════════════════════════════════════════
@@ -132,6 +133,7 @@ $("add-custom-model").addEventListener("click", addCustomModel);
 $("export-md-btn").addEventListener("click", () => exportReport("md"));
 $("export-latex-btn").addEventListener("click", () => exportReport("latex"));
 $("expand-citations-btn").addEventListener("click", expandCitations);
+$("clear-runs-btn").addEventListener("click", clearRunHistory);
 $("approve-btn").addEventListener("click", () => approveRun(true));
 $("reject-btn").addEventListener("click", () => approveRun(false));
 
@@ -290,6 +292,8 @@ function startSSE(runId) {
         state.run = data.run;
         renderStageProgress(data.run.stages, data.run.status);
         renderRun();
+        // Refresh graph live if the user is on the graph view
+        if (state.currentView === "graph") loadAndDrawGraph();
         if (data.type === "approval_needed") {
           showApproval();
           setStatus("awaiting_approval");
@@ -403,6 +407,25 @@ async function exportReport(format) {
 /* ═══════════════════════════════════════════
    CITATION EXPANSION
 ═══════════════════════════════════════════ */
+async function clearRunHistory() {
+  const btn = $("clear-runs-btn");
+  btn.disabled = true;
+  btn.textContent = "Clearing…";
+  try {
+    await fetchJson("/api/runs", { method: "DELETE" });
+    state.run = null;
+    state.sseSource?.close();
+    state.sseSource = null;
+    setStatus("idle");
+    $("pipeline-stages").innerHTML = `<div class="empty-state">History cleared. Start a new run.</div>`;
+    $("run-summary").innerHTML = `<div class="empty-state">No run data yet.</div>`;
+    $("decision-center").innerHTML = `<div class="empty-state">No decision yet.</div>`;
+    _resetGraph();
+  } catch(e) { showError(e.message); }
+  btn.disabled = false;
+  btn.textContent = "Clear History";
+}
+
 async function expandCitations() {
   if (!state.projectId) return;
   const btn = $("expand-citations-btn");
@@ -468,6 +491,7 @@ function _resetGraph() {
   _graphNodeIds = new Set();
   _graphAutoFit = false;
   _hoveredNode  = null;
+  _stopDataFlow();
   const el = $("graph-canvas");
   if (el) el.innerHTML = "";
 }
@@ -531,8 +555,9 @@ function _initGraph() {
   if (!el) return;
   el.innerHTML = "";
   _graphAutoFit = false; _hoveredNode = null;
-  const W = el.clientWidth || 900;
-  const H = el.clientHeight || 520;
+  // Use offsetWidth — more reliable than clientWidth when view just became visible
+  const W = el.offsetWidth  || el.parentElement?.offsetWidth  || 900;
+  const H = el.offsetHeight || el.parentElement?.offsetHeight || 560;
 
   _graph = ForceGraph()(el)
     .width(W).height(H)
@@ -555,8 +580,8 @@ function _initGraph() {
     .linkDirectionalArrowRelPos(0.82)
     .linkDirectionalArrowColor(l => { const s = typeof l.source==="object"?l.source:{}; return (NODE_COLORS[s.kind]||"#4db8ff")+"88"; })
     .linkDirectionalParticles(2)
-    .linkDirectionalParticleWidth(1.8)
-    .linkDirectionalParticleSpeed(0.0045)
+    .linkDirectionalParticleWidth(2.5)
+    .linkDirectionalParticleSpeed(0.006)
     .linkDirectionalParticleColor(l => { const s = typeof l.source==="object"?l.source:{}; return NODE_COLORS[s.kind]||"#4db8ff"; })
     .onNodeClick(n => showNodeDetail(n))
     .onNodeHover(n => { _hoveredNode = n; el.style.cursor = n ? "pointer" : "grab"; if (_graph) _graph.nodeCanvasObject(_drawNode); })
@@ -565,6 +590,16 @@ function _initGraph() {
   _graph.d3Force("charge").strength(-220);
   _graph.d3Force("link").distance(70);
   _graphNodeIds = new Set();
+
+  // Resize to true container dimensions after browser completes layout
+  requestAnimationFrame(() => {
+    if (!_graph) return;
+    const rW = el.offsetWidth;
+    const rH = el.offsetHeight;
+    if (rW > 0 && rH > 0 && (rW !== W || rH !== H)) {
+      _graph.width(rW).height(rH);
+    }
+  });
 }
 
 function drawGraph(graph) {
@@ -608,6 +643,41 @@ function drawGraph(graph) {
     _graphAutoFit = true;
     setTimeout(() => _graph.zoomToFit(700, 60), 1000);
   }
+
+  _startDataFlow();
+}
+
+let _flowInterval = null;
+function _startDataFlow() {
+  _stopDataFlow();
+  if (!state.run || !state.run.messages || !_graph) return;
+  let idx = 0;
+  _flowInterval = setInterval(() => {
+    if (!_graph) return;
+    const msgs = state.run.messages;
+    if (msgs.length === 0) return;
+    if (idx >= msgs.length) idx = 0;
+    
+    // Optional: if live run, bias toward recent messages
+    if (state.run.status === "running" && msgs.length > 5 && Math.random() > 0.3) {
+      idx = msgs.length - 1 - Math.floor(Math.random() * 3);
+    }
+    
+    const msg = msgs[idx];
+    const _linkData = _graph.graphData().links;
+    const link = _linkData.find(l => {
+      const s = typeof l.source==="object" ? l.source.id : l.source;
+      const t = typeof l.target==="object" ? l.target.id : l.target;
+      return s === msg.source && t === msg.target;
+    });
+    if (link) _graph.emitParticle(link);
+    
+    idx++;
+  }, 350);
+}
+
+function _stopDataFlow() {
+  if (_flowInterval) { clearInterval(_flowInterval); _flowInterval = null; }
 }
 
 function showNodeDetail(d) {
@@ -662,6 +732,7 @@ function renderRun() {
   // Decision center
   renderDecisionCenter();
   renderFinalReport();
+  renderExperiments();
 
   // Swarm messages
   $("swarm-messages").innerHTML = r.messages?.map(m =>
@@ -727,6 +798,64 @@ function renderFinalReport() {
     ).join("");
   } else {
     $("report-content").innerHTML = empty("Report will appear after a run completes.");
+  }
+}
+
+/* ═══════════════════════════════════════════
+   EXPERIMENTS VIEW
+═══════════════════════════════════════════ */
+function renderExperiments() {
+  if (!state.run) return;
+  const r = state.run;
+
+  // Experiment list (from project experiments + run artifacts)
+  const expResults = r.artifacts?.experiment_results || [];
+  const expSummary = r.artifacts?.experiment_summary || {};
+
+  if (expResults.length) {
+    $("experiment-runs").innerHTML = expResults.map(e =>
+      listItem(
+        e.name || e.id,
+        `${e.status || "pending"} · ${e.objective?.slice(0,60) || "—"}`,
+        Object.entries(e.metrics || {}).map(([k,v]) => `${prettify(k)}: ${typeof v === "number" ? v.toFixed(3) : v}`).join(" · "),
+        e.status === "completed" ? "agent" : "model"
+      )
+    ).join("");
+  } else {
+    $("experiment-runs").innerHTML = empty("No experiments yet. Start a research run to generate experiments.");
+  }
+
+  // Generated code
+  const codegen = r.artifacts?.codegen_result || {};
+  if (codegen.code) {
+    $("experiment-code").innerHTML = `
+      <div class="list-item model">
+        <div class="item-meta">Status: ${esc(codegen.status || "unknown")} · Script: ${esc(codegen.script_path || "in-memory")}</div>
+        <pre class="code-block"><code>${esc(codegen.code)}</code></pre>
+      </div>`;
+  } else if (codegen.status) {
+    $("experiment-code").innerHTML = listItem("Code Generation", codegen.status, codegen.reason || codegen.error || "—", "model");
+  } else {
+    $("experiment-code").innerHTML = empty("Code will appear after the Code Generation agent runs.");
+  }
+
+  // Execution results
+  if (expSummary.completed > 0) {
+    let html = listItem(
+      `${expSummary.completed} experiment${expSummary.completed !== 1 ? "s" : ""} completed`,
+      `Decision: ${expSummary.decision_title || "—"} · Code executed: ${expSummary.code_executed ? "Yes" : "No"}`,
+      `Best: ${expSummary.best_experiment || "—"} · Codegen: ${expSummary.codegen_status || "—"}`,
+      "agent"
+    );
+    if (expSummary.live_metrics && Object.keys(expSummary.live_metrics).length) {
+      html += `<h4 style="margin:12px 0 6px;font-size:12px;color:var(--text-3)">LIVE METRICS</h4>`;
+      html += Object.entries(expSummary.live_metrics).map(([k,v]) =>
+        listItem(prettify(k), typeof v === "number" ? v.toFixed(4) : String(v), "", "decision")
+      ).join("");
+    }
+    $("experiment-results").innerHTML = html;
+  } else {
+    $("experiment-results").innerHTML = empty("Results will appear after the Executor agent runs.");
   }
 }
 

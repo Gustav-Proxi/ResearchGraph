@@ -37,6 +37,10 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
       <span>Papers</span>
     </button>
+    <button class="nav-item" data-view="experiments" id="nav-experiments">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v5.586a1 1 0 00.293.707l4.414 4.414a2 2 0 01.586 1.414V19a2 2 0 01-2 2H5.707a2 2 0 01-2-2v-3.879a2 2 0 01.586-1.414l4.414-4.414A1 1 0 009 8.586V3z"/><line x1="9" y1="3" x2="15" y2="3"/></svg>
+      <span>Experiments</span>
+    </button>
     <button class="nav-item" data-view="report" id="nav-report">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       <span>Report</span>
@@ -144,6 +148,10 @@
 
   <!-- ═══ VIEW: PIPELINE ═══ -->
   <section id="view-pipeline" class="view">
+    <div class="section-header" style="margin-bottom:16px">
+      <h3>Pipeline</h3>
+      <button id="clear-runs-btn" class="btn-secondary btn-sm">Clear History</button>
+    </div>
     <div class="pipeline-container">
       <div class="pipeline-stages" id="pipeline-stages">
         <div class="empty-state">Start a research run to see the pipeline.</div>
@@ -213,6 +221,28 @@
           <div id="model-reliability" class="card-list"><div class="empty-state">—</div></div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ═══ VIEW: EXPERIMENTS ═══ -->
+  <section id="view-experiments" class="view">
+    <div class="section-header">
+      <h3>Experiments</h3>
+    </div>
+
+    <div class="detail-card">
+      <h3>Experiment Runs</h3>
+      <div id="experiment-runs" class="card-list"><div class="empty-state">No experiments yet. Start a research run to generate experiments.</div></div>
+    </div>
+
+    <div class="detail-card collapsible" data-collapsed="false" style="margin-top:16px">
+      <h3 class="collapsible-header">Generated Code <span class="collapse-icon">▸</span></h3>
+      <div id="experiment-code" class="collapsed"><div class="empty-state">Code will appear after the Code Generation agent runs.</div></div>
+    </div>
+
+    <div class="detail-card collapsible" data-collapsed="false" style="margin-top:16px">
+      <h3 class="collapsible-header">Execution Results <span class="collapse-icon">▸</span></h3>
+      <div id="experiment-results" class="collapsed"><div class="empty-state">Results will appear after the Executor agent runs.</div></div>
     </div>
   </section>
 
