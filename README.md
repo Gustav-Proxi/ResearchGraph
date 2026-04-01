@@ -23,15 +23,37 @@ research-graph-api
 # → http://127.0.0.1:8080
 ```
 
-Set your OpenRouter key for real LLM calls:
+## API keys
+
+**Do not put API keys in `data/model_hub.json`** — that file is gitignored precisely to prevent accidental commits. Use environment variables or a `.env` file instead.
+
+### Environment variables
+
 ```bash
-export OPENROUTER_API_KEY=sk-or-...
+export OPENROUTER_API_KEY=sk-or-...        # required for LLM calls
+export SEMANTIC_SCHOLAR_API_KEY=...        # optional — raises Semantic Scholar rate limits
 ```
 
-Optionally add a Semantic Scholar key for higher rate limits:
-```bash
-export SEMANTIC_SCHOLAR_API_KEY=...
+Add these to your shell profile (`~/.zshrc`, `~/.bashrc`) or set them before running the server.
+
+### .env file
+
+Create a `.env` file in the project root (it is gitignored):
+
 ```
+OPENROUTER_API_KEY=sk-or-...
+SEMANTIC_SCHOLAR_API_KEY=...
+```
+
+The server reads these at startup via `python-dotenv`.
+
+### Settings tab
+
+You can also paste your OpenRouter key in the **Settings** tab of the UI. It is stored in memory only and does not persist to disk.
+
+### Model provider
+
+By default the system routes through OpenRouter. You can switch to Ollama (local) or any OpenAI-compatible endpoint in the Settings tab — no key required for local models.
 
 ## Architecture
 
@@ -124,7 +146,7 @@ POST /api/models/custom
 - **LM Studio** — OpenAI-compatible endpoint at `http://127.0.0.1:1234/v1`
 - **Custom** — any OpenAI-compatible endpoint
 
-Configure in Settings tab or via `data/model_hub.json`.
+Configure in the Settings tab. Never write keys directly into `data/model_hub.json`.
 
 ## Development notes
 
