@@ -1,0 +1,19 @@
+# Secrets — never commit these
+data/model_hub.json
+.env
+*.env
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache/
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
